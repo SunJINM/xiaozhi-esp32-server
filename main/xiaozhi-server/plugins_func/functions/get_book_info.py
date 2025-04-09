@@ -82,7 +82,7 @@ def get_book_info(conn, book_name: str = None, lang: str = "zh_CN"):
     """
     获取书本信息
     """
-    cookie = ""
+    cookie = "_did__=1721089245037909763081805454094; NTKF_T2D_CLIENTID=guestCC1202B0-D683-D52E-3B48-D1E4AF09D5B8; xxtSessionId=2c65a62609b9d2cff6aba0454c673c935a3ea838; _PROV_CODE=1; _PROV_CHNG=true; _TSVID__=9b93fe9667e84090be35c7cfde3d89de; _bgid__=UWFWbuKyTRpccpWbNCcAFKTDGyKprgGs8yNZ8gKsFDlDwp7dv0TwEXG1AeDyekqx"
     book_infos = fetch_book_info(book_name, cookie)
     if not book_infos or len(book_infos) == 0:
         return ActionResponse(Action.REQLLM, "抱歉，没有找到相关的书本信息。", None)

@@ -267,12 +267,12 @@ class ConnectionHandler:
 
         """加载插件"""
         self.func_handler = FunctionHandler(self)
-        self.mcp_manager = MCPManager(self)
+        # self.mcp_manager = MCPManager(self)
 
         """加载MCP工具"""
-        asyncio.run_coroutine_threadsafe(
-            self.mcp_manager.initialize_servers(), self.loop
-        )
+        # asyncio.run_coroutine_threadsafe(
+        #     self.mcp_manager.initialize_servers(), self.loop
+        # )
 
     def change_system_prompt(self, prompt):
         self.prompt = prompt
@@ -537,13 +537,13 @@ class ConnectionHandler:
                 }
 
                 # 处理MCP工具调用
-                if self.mcp_manager.is_mcp_tool(function_name):
-                    result = self._handle_mcp_tool_call(function_call_data)
-                else:
+                # if self.mcp_manager.is_mcp_tool(function_name):
+                #     result = self._handle_mcp_tool_call(function_call_data)
+                # else:
                     # 处理系统函数
-                    result = self.func_handler.handle_llm_function_call(
-                        self, function_call_data
-                    )
+                result = self.func_handler.handle_llm_function_call(
+                    self, function_call_data
+                )
                 self._handle_function_result(result, function_call_data, text_index + 1)
 
         # 处理最后剩余的文本
