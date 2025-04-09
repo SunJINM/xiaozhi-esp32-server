@@ -53,7 +53,7 @@ public class SysUserServiceImpl extends BaseServiceImpl<SysUserDao, SysUserEntit
         if (users == null || users.isEmpty()) {
             return null;
         }
-        SysUserEntity entity = users.getFirst();
+        SysUserEntity entity = users.get(0);
         return ConvertUtils.sourceToTarget(entity, SysUserDTO.class);
     }
 
@@ -184,7 +184,7 @@ public class SysUserServiceImpl extends BaseServiceImpl<SysUserDao, SysUserEntit
 
     /**
      * 生成随机密码
-     * 
+     *
      * @return 随机生成的密码
      */
     private String generatePassword() {

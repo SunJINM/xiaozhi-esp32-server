@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -36,6 +37,7 @@ import xiaozhi.modules.device.vo.UserShowDeviceListVO;
 import xiaozhi.modules.security.user.SecurityUser;
 import xiaozhi.modules.sys.service.SysUserUtilService;
 
+@Slf4j
 @Service
 public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> implements DeviceService {
 
@@ -66,11 +68,13 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
 
     @Override
     public Boolean deviceActivation(String agentId, String activationCode) {
+        log.info("agentId: {}, activationCode: {}", agentId, activationCode);
         if (StringUtils.isBlank(activationCode)) {
             throw new RenException("激活码不能为空");
         }
         String deviceKey = "ota:activation:code:" + activationCode;
         Object cacheDeviceId = redisTemplate.opsForValue().get(deviceKey);
+        log.info("cacheDeviceId: {}", cacheDeviceId);
         if (cacheDeviceId == null) {
             throw new RenException("激活码错误");
         }
@@ -78,6 +82,7 @@ public class DeviceServiceImpl extends BaseServiceImpl<DeviceDao, DeviceEntity> 
         String safeDeviceId = deviceId.replace(":", "_").toLowerCase();
         String cacheDeviceKey = String.format("ota:activation:data:%s", safeDeviceId);
         Map<Object, Object> cacheMap = redisTemplate.opsForHash().entries(cacheDeviceKey);
+        log.info("cacheMap: {}", cacheMap);
         if (cacheMap == null) {
             throw new RenException("激活码错误");
         }
