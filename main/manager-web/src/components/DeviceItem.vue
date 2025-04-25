@@ -23,12 +23,6 @@
       <div class="settings-btn" @click="handleConfigure">
         配置角色
       </div>
-      <!--      <div class="settings-btn">-->
-      <!--        声纹识别-->
-      <!--      </div>-->
-      <!--      <div class="settings-btn">-->
-      <!--        历史对话-->
-      <!--      </div>-->
       <div class="settings-btn" @click="handleDeviceManage">
         设备管理({{ device.deviceCount }})
       </div>
@@ -80,10 +74,11 @@ export default {
 
 .settings-btn {
   font-weight: 500;
-  font-size: 10px;
+  font-size: 12px;
   color: #5778ff;
   background: #e6ebff;
-  width: 57px;
+  width: auto;
+  padding: 0 12px;
   height: 21px;
   line-height: 21px;
   cursor: pointer;
@@ -94,7 +89,7 @@ export default {
   display: flex;
   justify-content: space-between;
   margin-top: 15px;
-  font-size: 10px;
+  font-size: 12px;
   color: #979db1;
   font-weight: 400;
 }
