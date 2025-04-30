@@ -1,10 +1,15 @@
 from config.logger import setup_logging
 import time
+import asyncio
 from core.utils.util import remove_punctuation_and_length
 from core.handle.sendAudioHandle import send_stt_message
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
-
+from core.utils.dialogue import Message, Dialogue
+from core.utils.util import (
+    get_string_no_punctuation_or_emoji,
+)
+from plugins_func.register import Action, ActionResponse
 TAG = __name__
 logger = setup_logging()
 
@@ -59,7 +64,17 @@ async def startToChat(conn, text):
         ):
             await max_out_size(conn)
             return
-
+    # 如果当前处于智能体中，判断是否需要退出智能体
+    logger.bind(tag=TAG).debug(f"当前所处智能体: {conn.use_agent_call}")
+    if conn.use_agent_call is not None:
+        # 判断是否需要退出智能体
+        result = conn.handle_agent_abort(text)
+        logger.bind(tag=TAG).debug(f"是否退出当前智能体: {result}")
+        if result == "True":
+            conn.use_agent_call = None
+            return
+        conn.executor.submit(conn.chat_with_agent_calling, text, conn.use_agent_call)
+        return
     # 首先进行意图分析
     intent_handled = await handle_user_intent(conn, text)
 

@@ -26,6 +26,8 @@ from core.handle.receiveAudioHandle import handleAudioMessage
 from core.handle.functionHandler import FunctionHandler
 from plugins_func.register import Action, ActionResponse
 from core.auth import AuthMiddleware, AuthenticationError
+from core.agent.abort_prompt import get_abort_prompt_for_agent
+from core.agent.agent_manager import AgentManager
 from core.mcp.manager import MCPManager
 from config.config_loader import get_private_config_from_api
 from config.manage_api_client import DeviceNotFoundException, DeviceBindException
@@ -93,6 +95,11 @@ class ConnectionHandler:
         # llm相关变量
         self.llm_finish_task = False
         self.dialogue = Dialogue()
+
+        # agent相关变量
+        self.use_agent_call = None
+        self.agent_handler = None
+        self.agent_dialogue = Dialogue()
 
         # tts相关变量
         self.tts_first_text_index = -1
@@ -397,6 +404,11 @@ class ConnectionHandler:
         """加载插件"""
         self.func_handler = FunctionHandler(self)
         # self.mcp_manager = MCPManager(self)
+        self.agent_handler = AgentManager(self)
+
+        asyncio.run_coroutine_threadsafe(
+            self.agent_handler.initialize_servers(), self.loop
+        )
 
         """加载MCP工具"""
         # asyncio.run_coroutine_threadsafe(
@@ -629,9 +641,14 @@ class ConnectionHandler:
                 #     result = self._handle_mcp_tool_call(function_call_data)
                 # else:
                     # 处理系统函数
-                result = self.func_handler.handle_llm_function_call(
-                    self, function_call_data
-                )
+                if self.agent_handler.is_agent_tool(function_name):
+                    result = self.chat_with_agent_calling(
+                        query, function_name
+                    )
+                else: 
+                    result = self.func_handler.handle_llm_function_call(
+                        self, function_call_data
+                    )
                 self._handle_function_result(result, function_call_data, text_index + 1)
 
         # 处理最后剩余的文本
@@ -701,6 +718,135 @@ class ConnectionHandler:
             )
 
         return ActionResponse(action=Action.REQLLM, result="工具调用出错", response="")
+    
+    def chat_with_agent_calling(self, query, agent_type):
+        self.logger.bind(tag=TAG).debug(f"Chat with agent calling start: {query}")
+        """
+        与智能体进行对话，支持流式输出
+
+        Args:
+            query: 用户输入的文本
+            agent_type: 智能体类型
+
+        Returns:
+            ActionResponse: 智能体的响应
+        """
+        try:
+            # 记录当前使用的智能体
+            self.use_agent_call = agent_type
+
+            # 将用户输入添加到智能体对话历史
+            self.agent_dialogue.put(Message(role="user", content=query))
+            self.logger.bind(tag=TAG).debug(f"Chat with agent calling dialogue: {self.agent_dialogue}")
+
+            # 调用智能体处理对话，获取流式响应
+            response_message = []
+            processed_chars = 0  # 跟踪已处理的字符位置
+            text_index = 0
+
+            # 获取智能体的流式响应
+            agent_responses = asyncio.run_coroutine_threadsafe(
+                self.agent_handler.aexecute_tool(agent_type, self.agent_dialogue), 
+                self.loop
+            ).result()
+            self.logger.bind(tag=TAG).debug(f"Chat with agent calling result: {agent_responses}")
+            for content in agent_responses:
+                response_message.append(content)
+                if self.client_abort:
+                    break
+
+                # 合并当前全部文本并处理未分割部分
+                full_text = "".join(response_message)
+                current_text = full_text[processed_chars:]
+
+                # 查找最后一个有效标点
+                punctuations = ("。", "？", "！", "；", "：")
+                last_punct_pos = -1
+                for punct in punctuations:
+                    pos = current_text.rfind(punct)
+                    if pos > last_punct_pos:
+                        last_punct_pos = pos
+
+                if last_punct_pos != -1:
+                    segment_text_raw = current_text[: last_punct_pos + 1]
+                    segment_text = get_string_no_punctuation_or_emoji(segment_text_raw)
+                    if segment_text:
+                        text_index += 1
+                        self.recode_first_last_text(segment_text, text_index)
+                        future = self.executor.submit(
+                            self.speak_and_play, segment_text, text_index
+                        )
+                        self.tts_queue.put(future)
+                        processed_chars += len(segment_text_raw)
+
+            full_text = "".join(response_message)
+            remaining_text = full_text[processed_chars:]
+            if remaining_text:
+                segment_text = get_string_no_punctuation_or_emoji(remaining_text)
+                if segment_text:
+                    text_index += 1
+                    self.recode_first_last_text(segment_text, text_index)
+                    future = self.executor.submit(
+                        self.speak_and_play, segment_text, text_index
+                    )
+                    self.tts_queue.put(future)
+
+            if len(response_message) > 0:
+                self.agent_dialogue.put(
+                    Message(role="assistant", content="".join(response_message))
+                )
+
+            return ActionResponse(
+                action=Action.NONE, 
+                result="",
+                response=""
+            )
+
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"智能体调用错误: {e}")
+            error_msg = f"智能体 {agent_type} 处理失败"
+            return ActionResponse(
+                action=Action.ERROR,
+                result=error_msg,
+                response=""
+            )
+
+
+    def handle_agent_abort(self, query):
+        self.logger.bind(tag=TAG).debug(f"handle agent abort start: {query}")
+        """handle agent abort"""
+        self.dialogue.put(Message(role="user", content=query))
+        abort_msg = get_abort_prompt_for_agent(self.use_agent_call)
+        try:
+            llm_responses = self.llm.response_no_stream(
+                abort_msg,
+                query
+            )
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"LLM 处理出错 {query}: {e}")
+            return None
+        self.logger.bind(tag=TAG).debug(f"handle agent abort result: {llm_responses}")
+        a = extract_json_from_string(llm_responses)
+        result = llm_responses
+        bHasError = False
+        if a is not None:
+            try:
+                content_arguments_json = json.loads(a)
+                result = content_arguments_json["result"]
+            except Exception as e:
+                bHasError = True
+        else:
+            bHasError = True
+        if bHasError:
+            self.logger.bind(tag=TAG).error(
+                f"agent abort handle error: {llm_responses}"
+            )
+        if len(llm_responses) > 0:
+            self.dialogue.put(
+                Message(role="assistant", content="".join(llm_responses))
+            )
+        return result
+
 
     def _handle_function_result(self, result, function_call_data, text_index):
         if result.action == Action.RESPONSE:  # 直接回复前端
