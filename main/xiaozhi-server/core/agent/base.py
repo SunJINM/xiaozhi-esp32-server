@@ -26,9 +26,17 @@ class Agent(ABC, BaseModel):
     def _generate(self, dialogue: Dialogue):
         pass
 
+    @abstractmethod
+    def _suggest_generate(self, dialogue: Dialogue):
+        pass
+
 
     def generate(self, dialogue: Dialogue):
         return self._generate(dialogue)
+    
+
+    def suggest_generate(self, dialogue: Dialogue):
+        return self._suggest_generate(dialogue)
 
 
 

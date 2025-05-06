@@ -737,10 +737,11 @@ class ConnectionHandler:
 
             # 将用户输入添加到智能体对话历史
             self.agent_dialogue.put(Message(role="user", content=query))
-            self.logger.bind(tag=TAG).debug(f"Chat with agent calling dialogue: {self.agent_dialogue}")
+            self.logger.bind(tag=TAG).debug(f"Chat with agent calling dialogue: {self.agent_dialogue.get_llm_dialogue()}")
 
             # 调用智能体处理对话，获取流式响应
             response_message = []
+            suggest_message = []
             processed_chars = 0  # 跟踪已处理的字符位置
             text_index = 0
 
@@ -795,6 +796,60 @@ class ConnectionHandler:
                 self.agent_dialogue.put(
                     Message(role="assistant", content="".join(response_message))
                 )
+                if len(self.agent_dialogue.dialogue) != 3:
+                    processed_chars = 0  # 跟踪已处理的字符位置
+                    text_index = 0
+
+                    agent_suggest = asyncio.run_coroutine_threadsafe(
+                        self.agent_handler.atool_suggest(agent_type, self.agent_dialogue), 
+                        self.loop
+                    ).result()
+                    self.logger.bind(tag=TAG).debug(f"Chat with agent calling suggest: {agent_responses}")
+                    for content in agent_suggest:
+                        suggest_message.append(content)
+                        if self.client_abort:
+                            break
+
+                        # 合并当前全部文本并处理未分割部分
+                        full_text = "".join(suggest_message)
+                        current_text = full_text[processed_chars:]
+
+                        # 查找最后一个有效标点
+                        punctuations = ("。", "？", "！", "；", "：")
+                        last_punct_pos = -1
+                        for punct in punctuations:
+                            pos = current_text.rfind(punct)
+                            if pos > last_punct_pos:
+                                last_punct_pos = pos
+
+                        if last_punct_pos != -1:
+                            segment_text_raw = current_text[: last_punct_pos + 1]
+                            segment_text = get_string_no_punctuation_or_emoji(segment_text_raw)
+                            if segment_text:
+                                text_index += 1
+                                self.recode_first_last_text(segment_text, text_index)
+                                future = self.executor.submit(
+                                    self.speak_and_play, segment_text, text_index
+                                )
+                                self.tts_queue.put(future)
+                                processed_chars += len(segment_text_raw)
+
+                    full_text = "".join(suggest_message)
+                    remaining_text = full_text[processed_chars:]
+                    if remaining_text:
+                        segment_text = get_string_no_punctuation_or_emoji(remaining_text)
+                        if segment_text:
+                            text_index += 1
+                            self.recode_first_last_text(segment_text, text_index)
+                            future = self.executor.submit(
+                                self.speak_and_play, segment_text, text_index
+                            )
+                            self.tts_queue.put(future)
+                    if len(suggest_message) > 0:
+                        self.agent_dialogue.update_last_message(
+                            suggest_message
+                        )
+
 
             return ActionResponse(
                 action=Action.NONE, 
@@ -815,7 +870,6 @@ class ConnectionHandler:
     def handle_agent_abort(self, query):
         self.logger.bind(tag=TAG).debug(f"handle agent abort start: {query}")
         """handle agent abort"""
-        self.dialogue.put(Message(role="user", content=query))
         abort_msg = get_abort_prompt_for_agent(self.use_agent_call)
         try:
             llm_responses = self.llm.response_no_stream(
@@ -841,10 +895,10 @@ class ConnectionHandler:
             self.logger.bind(tag=TAG).error(
                 f"agent abort handle error: {llm_responses}"
             )
-        if len(llm_responses) > 0:
-            self.dialogue.put(
-                Message(role="assistant", content="".join(llm_responses))
-            )
+        # if len(llm_responses) > 0:
+        #     self.dialogue.put(
+        #         Message(role="assistant", content="".join(llm_responses))
+        #     )
         return result
 
 

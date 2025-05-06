@@ -227,6 +227,25 @@ class AgentManager:
                 return agent.generate(dialogue)
 
         raise ValueError(f"未找到工具 {tool_name}")
+    
+    async def atool_suggest(self, tool_name: str, dialogue: Dialogue) -> Any:
+        """执行工具调用建议
+        Args:
+            tool_name: 工具名称
+            arguments: 工具参数
+        Returns:
+            Any: 工具执行结果
+        Raises:
+            ValueError: 工具未找到时抛出
+        """
+        self.logger.bind(tag=__name__).info(
+            f"执行智能体 {tool_name}"
+        )
+        for agent_name, agent in self.agents.items():
+            if agent_name == tool_name:
+                return agent.suggest_generate(dialogue)
+
+        raise ValueError(f"未找到工具 {tool_name}")
 
     async def cleanup_all(self) -> None:
         """清理所有智能体"""

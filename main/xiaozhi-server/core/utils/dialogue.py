@@ -34,6 +34,12 @@ class Dialogue:
         for m in self.dialogue:
             self.getMessages(m, dialogue)
         return dialogue
+    
+    def get_dialogue_str(self) -> str:
+        dialogue = []
+        for m in self.dialogue:
+            dialogue.append(f"{m.role}:{m.content}")
+        return "\n".join(dialogue)
 
     def update_system_message(self, new_content: str):
         """更新或添加系统消息"""
@@ -42,7 +48,13 @@ class Dialogue:
         if system_msg:
             system_msg.content = new_content
         else:
-            self.put(Message(role="system", content=new_content))
+            self.dialogue.insert(0, Message(role="system", content=new_content))
+    
+    def update_last_message(self, content: str):
+        # dialogue = self.dialogue[len(self.dialogue) - 1]
+        # if dialogue is not None:
+        #     dialogue.content = dialogue.content + content
+        pass
 
     def get_llm_dialogue_with_memory(self, memory_str: str = None) -> List[Dict[str, str]]:
         if memory_str is None or len(memory_str) == 0:

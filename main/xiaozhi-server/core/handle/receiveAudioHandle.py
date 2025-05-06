@@ -1,15 +1,9 @@
 from config.logger import setup_logging
 import time
-import asyncio
 from core.utils.util import remove_punctuation_and_length
 from core.handle.sendAudioHandle import send_stt_message
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
-from core.utils.dialogue import Message, Dialogue
-from core.utils.util import (
-    get_string_no_punctuation_or_emoji,
-)
-from plugins_func.register import Action, ActionResponse
 TAG = __name__
 logger = setup_logging()
 
@@ -72,6 +66,7 @@ async def startToChat(conn, text):
         logger.bind(tag=TAG).debug(f"是否退出当前智能体: {result}")
         if result == "True":
             conn.use_agent_call = None
+            await abort_agent(conn)
             return
         conn.executor.submit(conn.chat_with_agent_calling, text, conn.use_agent_call)
         return
@@ -124,8 +119,14 @@ async def max_out_size(conn):
     conn.audio_play_queue.put((opus_packets, text, 0))
     conn.close_after_chat = True
 
+async def abort_agent(conn):
+    prompt = (
+                "请你以“已退出”为开头，用富有感情、依依不舍的话来结束这个功能吧。"
+            )
+    await startToChat(conn, prompt)
 
-async def check_bind_device(conn):
+
+async def check_bind_device(conn): 
     if conn.bind_code:
         # 确保bind_code是6位数字
         if len(conn.bind_code) != 6:
