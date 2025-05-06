@@ -1124,8 +1124,12 @@ class ConnectionHandler:
             while not self.stop_event.is_set():
                 await asyncio.sleep(self.timeout_seconds)
                 if not self.stop_event.is_set():
-                    self.logger.bind(tag=TAG).info("连接超时，准备关闭")
-                    await self.close(self.websocket)
-                    break
+                    if self.use_agent_call is not None:
+                        text = "复述当前场景"
+                        self.executor.submit(self.chat_with_agent_calling, text, self.use_agent_call)
+                    else:
+                        self.logger.bind(tag=TAG).info("连接超时，准备关闭")
+                        await self.close(self.websocket)
+                        break
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"超时检查任务出错: {e}")
