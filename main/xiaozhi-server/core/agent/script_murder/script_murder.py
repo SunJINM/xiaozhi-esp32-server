@@ -20,6 +20,6 @@ class ScriptMurder(Agent):
 
         _dialogue = [
                 {"role": "system", "content": _prompt},
-                {"role": "user", "content": "请生成三条指令"}
+                {"role": "user", "content": "请生成指令"}
             ]
         return self.llm.response(self.session_id, _dialogue)

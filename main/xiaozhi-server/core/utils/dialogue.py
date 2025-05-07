@@ -38,7 +38,8 @@ class Dialogue:
     def get_dialogue_str(self) -> str:
         dialogue = []
         for m in self.dialogue:
-            dialogue.append(f"{m.role}:{m.content}")
+            if m.role != "system":
+                dialogue.append(f"{m.role}:{m.content}")
         return "\n".join(dialogue)
 
     def update_system_message(self, new_content: str):
