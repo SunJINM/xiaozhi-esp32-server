@@ -1,6 +1,5 @@
 [![Banners](docs/images/banner1.png)](https://github.com/xinnan-tech/xiaozhi-esp32-server)
 
-
 <h1 align="center">小智后端服务xiaozhi-esp32-server</h1>
 
 <p align="center">
@@ -11,12 +10,11 @@
 </p>
 
 <p align="center">
-<a href="./README.md">English</a>
-· 简体中文
-· <a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/releases">更新日志</a>
-· <a href="./README.md#%E9%83%A8%E7%BD%B2%E6%96%87%E6%A1%A3">部署文档</a>
-· <a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/issues">反馈问题</a>
+<a href="./README_en.md">English</a>
 · <a href="./docs/FAQ.md">常见问题</a>
+· <a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/issues">反馈问题</a>
+· <a href="./README.md#%E9%83%A8%E7%BD%B2%E6%96%87%E6%A1%A3">部署文档</a>
+· <a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/releases">更新日志</a>
 </p>
 <p align="center">
   <a href="https://github.com/xinnan-tech/xiaozhi-esp32-server/releases">
@@ -132,17 +130,7 @@
 1、本项目为开源软件，本软件与对接的任何第三方API服务商（包括但不限于语音识别、大模型、语音合成等平台）均不存在商业合作关系，不为其服务质量及资金安全提供任何形式的担保。
 建议使用者优先选择持有相关业务牌照的服务商，并仔细阅读其服务协议及隐私政策。本软件不托管任何账户密钥、不参与资金流转、不承担充值资金损失风险。
 
-2、本项目成立时间较短，还未通过网络安全测评，请勿在生产环境中使用。 如果您在公网环境中部署学习本项目，请务必在配置文件
-`config.yaml` 中开启防护：
-
-```yaml
-server:
-  auth:
-    # 开启防护
-    enabled: true  
-```
-
-开启防护后，您需要根据实际情况校验机器的 token 或 mac 地址，详细请参见配置说明。
+2、本项目功能未完善，且未通过网络安全测评，请勿在生产环境中使用。 如果您在公网环境中部署学习本项目，请务必做好必要的防护。
 
 ---
 
@@ -154,23 +142,21 @@ server:
 
 #### 🚀 部署方式选择
 
-| 部署方式 | 特点 | 适用场景 | Docker部署文档 | 源码部署文档 |
-|---------|------|---------|---------|---------|
-| **最简化安装** | 智能对话、IOT功能，数据存储在配置文件 | 低配置环境，无需数据库，仅支持虾哥1.6.0及以下固件版本 | [Docker只运行Server](./docs/Deployment.md#%E6%96%B9%E5%BC%8F%E4%B8%80docker%E5%8F%AA%E8%BF%90%E8%A1%8Cserver) | [本地源码只运行Server](./docs/Deployment.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E5%8F%AA%E8%BF%90%E8%A1%8Cserver)|
-| **全模块安装** | 智能对话、IOT、OTA、智控台，数据存储在数据库 | 完整功能体验，支持虾哥最新固件 |[Docker运行全模块](./docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%B8%80docker%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) | [本地源码运行全模块](./docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) |
+| 部署方式 | 特点 | 适用场景 | Docker部署文档 | 源码部署文档 | 视频教程 | 
+|---------|------|---------|---------|---------|---------|
+| **最简化安装** | 智能对话、IOT功能，数据存储在配置文件 | 低配置环境，无需数据库 | [Docker只运行Server](./docs/Deployment.md#%E6%96%B9%E5%BC%8F%E4%B8%80docker%E5%8F%AA%E8%BF%90%E8%A1%8Cserver) | [本地源码只运行Server](./docs/Deployment.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E5%8F%AA%E8%BF%90%E8%A1%8Cserver)| - | 
+| **全模块安装** | 智能对话、IOT、OTA、智控台，数据存储在数据库 | 完整功能体验 |[Docker运行全模块](./docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%B8%80docker%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) | [本地源码运行全模块](./docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) | [本地源码视频教程](https://www.bilibili.com/video/BV1wBJhz4Ewe) | 
+
 
 > 💡 提示：以下是按最新代码部署后的测试平台，有需要可烧录测试，并发为6个，每天会清空数据
 
 ```
 智控台地址: https://2662r3426b.vicp.fun
+
+服务测试工具： https://2662r3426b.vicp.fun/test/
 OTA接口地址: https://2662r3426b.vicp.fun/xiaozhi/ota/
 Websocket接口地址: wss://2662r3426b.vicp.fun/xiaozhi/v1/
 ```
----
-
-## 常见问题 ❓
-
-如遇到问题或产品建议反馈[点这里](docs/FAQ.md)。
 
 ---
 ## 功能清单 ✨
@@ -246,7 +232,7 @@ Websocket接口地址: wss://2662r3426b.vicp.fun/xiaozhi/v1/
 | 使用方式 | 支持平台 | 免费平台 |
 |:---:|:---:|:---:|
 | 本地使用 | FunASR、SherpaASR | FunASR、SherpaASR |
-| 接口调用 | DoubaoASR | - |
+| 接口调用 | DoubaoASR、FunASRServer、TencentASR、AliyunASR | FunASRServer |
 
 ---
 

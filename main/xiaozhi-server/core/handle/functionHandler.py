@@ -1,16 +1,22 @@
 from config.logger import setup_logging
 import json
-from plugins_func.register import FunctionRegistry, ActionResponse, Action, ToolType
+from plugins_func.register import (
+    FunctionRegistry,
+    ActionResponse,
+    Action,
+    ToolType,
+    DeviceTypeRegistry,
+)
 from plugins_func.functions.hass_init import append_devices_to_prompt
 
 TAG = __name__
-logger = setup_logging()
 
 
 class FunctionHandler:
     def __init__(self, conn):
         self.conn = conn
         self.config = conn.config
+        self.device_type_registry = DeviceTypeRegistry()
         self.function_registry = FunctionRegistry()
         self.register_nessary_functions()
         self.register_config_functions()
@@ -40,7 +46,9 @@ class FunctionHandler:
         for func in self.functions_desc:
             func_names.append(func["function"]["name"])
         # 打印当前支持的函数列表
-        logger.bind(tag=TAG).info(f"当前支持的函数列表: {func_names}")
+        self.conn.logger.bind(tag=TAG, session_id=self.conn.session_id).info(
+            f"当前支持的函数列表: {func_names}"
+        )
         return func_names
 
     def get_functions(self):
@@ -81,7 +89,9 @@ class FunctionHandler:
             func = funcItem.func
             arguments = function_call_data["arguments"]
             arguments = json.loads(arguments) if arguments else {}
-            logger.bind(tag=TAG).debug(f"调用函数: {function_name}, 参数: {arguments}")
+            self.conn.logger.bind(tag=TAG).debug(
+                f"调用函数: {function_name}, 参数: {arguments}"
+            )
             if (
                 funcItem.type == ToolType.SYSTEM_CTL
                 or funcItem.type == ToolType.IOT_CTL
@@ -96,6 +106,6 @@ class FunctionHandler:
                     action=Action.NOTFOUND, result="没有找到对应的函数", response=""
                 )
         except Exception as e:
-            logger.bind(tag=TAG).error(f"处理function call错误: {e}")
+            self.conn.logger.bind(tag=TAG).error(f"处理function call错误: {e}")
 
         return None

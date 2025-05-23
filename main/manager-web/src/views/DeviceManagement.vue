@@ -15,15 +15,9 @@
       <div class="content-panel">
         <div class="content-area">
           <el-card class="device-card" shadow="never">
-            <el-table
-              ref="deviceTable"
-              :data="paginatedDeviceList"
-              class="transparent-table"
-              :header-cell-class-name="headerCellClassName"
-              v-loading="loading"
-              element-loading-text="拼命加载中"
-              element-loading-spinner="el-icon-loading"
-              element-loading-background="rgba(255, 255, 255, 0.7)">
+            <el-table ref="deviceTable" :data="paginatedDeviceList" class="transparent-table"
+              :header-cell-class-name="headerCellClassName" v-loading="loading" element-loading-text="拼命加载中"
+              element-loading-spinner="el-icon-loading" element-loading-background="rgba(255, 255, 255, 0.7)">
               <el-table-column label="选择" align="center" width="120">
                 <template slot-scope="scope">
                   <el-checkbox v-model="scope.row.selected"></el-checkbox>
@@ -34,7 +28,7 @@
                   {{ getFirmwareTypeName(scope.row.model) }}
                 </template>
               </el-table-column>
-              <el-table-column label="固件版本" prop="firmwareVersion" align="center" ></el-table-column>
+              <el-table-column label="固件版本" prop="firmwareVersion" align="center"></el-table-column>
               <el-table-column label="Mac地址" prop="macAddress" align="center"></el-table-column>
               <el-table-column label="绑定时间" prop="bindTime" align="center"></el-table-column>
               <el-table-column label="最近对话" prop="lastConversation" align="center"></el-table-column>
@@ -53,8 +47,8 @@
               </el-table-column>
               <el-table-column label="OTA升级" align="center">
                 <template slot-scope="scope">
-                  <el-switch v-model="scope.row.otaSwitch" size="mini" active-color="#13ce66"
-                    inactive-color="#ff4949"></el-switch>
+                  <el-switch v-model="scope.row.otaSwitch" size="mini" active-color="#13ce66" inactive-color="#ff4949"
+                    @change="handleOtaSwitchChange(scope.row)"></el-switch>
                 </template>
               </el-table-column>
               <el-table-column label="操作" align="center">
@@ -106,7 +100,6 @@
 import Api from '@/apis/api';
 import AddDeviceDialog from "@/components/AddDeviceDialog.vue";
 import HeaderBar from "@/components/HeaderBar.vue";
-import { FIRMWARE_TYPES } from "@/utils";
 
 export default {
   components: { HeaderBar, AddDeviceDialog },
@@ -124,6 +117,7 @@ export default {
       deviceList: [],
       loading: false,
       userApi: null,
+      firmwareTypes: [],
     };
   },
   computed: {
@@ -169,7 +163,19 @@ export default {
       this.fetchBindDevices(agentId);
     }
   },
+  created() {
+    this.getFirmwareTypes()
+  },
   methods: {
+    async getFirmwareTypes() {
+      try {
+        const res = await Api.dict.getDictDataByType('FIRMWARE_TYPE')
+        this.firmwareTypes = res.data
+      } catch (error) {
+        console.error('获取固件类型失败:', error)
+        this.$message.error(error.message || '获取固件类型失败')
+      }
+    },
     handlePageSizeChange(val) {
       this.pageSize = val;
       this.currentPage = 1;
@@ -288,20 +294,13 @@ export default {
         this.loading = false;
         if (data.code === 0) {
           this.deviceList = data.data.map(device => {
-            const bindDate = new Date(device.createDate);
-            const formattedBindTime = `${bindDate.getFullYear()}-${(bindDate.getMonth() + 1).toString().padStart(2, '0')}-${bindDate.getDate().toString().padStart(2, '0')} ${bindDate.getHours().toString().padStart(2, '0')}:${bindDate.getMinutes().toString().padStart(2, '0')}:${bindDate.getSeconds().toString().padStart(2, '0')}`;
-            let formattedLastConversation = '';
-            if (device.lastConnectedAt) {
-              const lastConvoDate = new Date(device.lastConnectedAt);
-              formattedLastConversation = `${lastConvoDate.getFullYear()}-${(lastConvoDate.getMonth() + 1).toString().padStart(2, '0')}-${lastConvoDate.getDate().toString().padStart(2, '0')} ${lastConvoDate.getHours().toString().padStart(2, '0')}:${lastConvoDate.getMinutes().toString().padStart(2, '0')}:${lastConvoDate.getSeconds().toString().padStart(2, '0')}`;
-            }
             return {
               device_id: device.id,
               model: device.board,
               firmwareVersion: device.appVersion,
               macAddress: device.macAddress,
-              bindTime: formattedBindTime,
-              lastConversation: formattedLastConversation,
+              bindTime: device.createDate,
+              lastConversation: device.lastConnectedAt,
               remark: device.alias,
               isEdit: false,
               otaSwitch: device.autoUpdate === 1,
@@ -323,8 +322,18 @@ export default {
       return "";
     },
     getFirmwareTypeName(type) {
-      const firmwareType = FIRMWARE_TYPES.find(item => item.key === type);
-      return firmwareType ? firmwareType.name : type;
+      const firmwareType = this.firmwareTypes.find(item => item.key === type)
+      return firmwareType ? firmwareType.name : type
+    },
+    handleOtaSwitchChange(row) {
+      Api.device.enableOtaUpgrade(row.device_id, row.otaSwitch ? 1 : 0, ({ data }) => {
+        if (data.code === 0) {
+          this.$message.success(row.otaSwitch ? '已设置成自动升级' : '已关闭自动升级')
+        } else {
+          row.otaSwitch = !row.otaSwitch
+          this.$message.error(data.msg || '操作失败')
+        }
+      })
     },
   }
 };
@@ -472,12 +481,13 @@ export default {
   flex: 1;
   overflow: hidden;
 }
-  ::v-deep .el-card__body {
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow: hidden;
+
+::v-deep .el-card__body {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
 
 .table_bottom {
@@ -691,5 +701,4 @@ export default {
 ::v-deep .el-table::before {
   display: none !important;
 }
-
 </style>
