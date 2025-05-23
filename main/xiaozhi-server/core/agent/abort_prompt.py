@@ -21,7 +21,7 @@ def get_abort_prompt_for_agent(agent_name: str) -> str:
 
 
 例如：
-如果用户输入： 我要退出智能体游戏
+如果用户输入： 我要退出游戏
 
 你应该按照以下格式回复：
 
@@ -36,6 +36,7 @@ def get_abort_prompt_for_agent(agent_name: str) -> str:
 # 决策结果指南
 
 1. 决策结果必须单独成一条消息，不要添加额外想法。消息必须以 <judge_result> 开头，以 </judge_result> 结尾，中间是决策结果的 JSON 数据。不需要额外的回复内容。
+2. 只有用户有明确的指令，是退出游戏或功能时，才认为是退出。
 
 ====
 

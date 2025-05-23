@@ -121,9 +121,9 @@ async def max_out_size(conn):
 
 async def abort_agent(conn):
     prompt = (
-                "请你以“已退出”为开头，用富有感情、依依不舍的话来结束这个功能吧。"
-            )
-    await startToChat(conn, prompt)
+        "请你以“已退出当前功能”为开头，用富有感情、依依不舍的话来结束这个功能吧。"
+    )
+    conn.executor.submit(conn.chat, prompt)
 
 
 async def check_bind_device(conn): 

@@ -51,11 +51,9 @@ class Dialogue:
         else:
             self.dialogue.insert(0, Message(role="system", content=new_content))
     
-    def update_last_message(self, content: str):
-        # dialogue = self.dialogue[len(self.dialogue) - 1]
-        # if dialogue is not None:
-        #     dialogue.content = dialogue.content + content
-        pass
+    def update_last_message(self,  message: Message):
+        self.dialogue[len(self.dialogue) - 1] = message
+
 
     def get_llm_dialogue_with_memory(self, memory_str: str = None) -> List[Dict[str, str]]:
         if memory_str is None or len(memory_str) == 0:

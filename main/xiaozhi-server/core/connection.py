@@ -522,6 +522,8 @@ class ConnectionHandler:
             # self.logger.bind(tag=TAG).info(f"对话记录: {self.dialogue.get_llm_dialogue_with_memory(memory_str)}")
 
             # 使用支持functions的streaming接口
+
+            self.logger.bind(tag=TAG).info(f"当前可用的工具: {functions}")
             llm_responses = self.llm.response_with_functions(
                 self.session_id,
                 self.dialogue.get_llm_dialogue_with_memory(memory_str),
@@ -793,8 +795,10 @@ class ConnectionHandler:
                     self.tts_queue.put(future)
 
             if len(response_message) > 0:
+                content = "".join(response_message)
+                message = Message(role="assistant", content=content)
                 self.agent_dialogue.put(
-                    Message(role="assistant", content="".join(response_message))
+                    message
                 )
                 if len(self.agent_dialogue.dialogue) != 3:
                     processed_chars = 0  # 跟踪已处理的字符位置
@@ -846,8 +850,10 @@ class ConnectionHandler:
                             )
                             self.tts_queue.put(future)
                     if len(suggest_message) > 0:
+                        content = content + "".join(suggest_message)
+                        message = Message(role="assistant", content=content)
                         self.agent_dialogue.update_last_message(
-                            suggest_message
+                            message
                         )
 
 

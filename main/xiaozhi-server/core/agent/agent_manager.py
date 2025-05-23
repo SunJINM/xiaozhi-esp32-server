@@ -68,7 +68,7 @@ class AgentManager:
                 "function": {
                     "name": "script_murder",
                     "description": (
-                        "玩剧本杀，用户可以通过该智能体玩剧本杀游戏,如果用户要玩剧本杀游戏，请调用该智能体"
+                        "当用户想要玩游戏或玩剧本杀时使用"
                     ),
                     "parameters": {
                         "type": "object",
