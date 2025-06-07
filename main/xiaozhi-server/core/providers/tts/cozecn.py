@@ -1,9 +1,4 @@
-import os
-import uuid
-import json
-import base64
 import requests
-from datetime import datetime
 from core.providers.tts.base import TTSProviderBase
 
 
@@ -21,12 +16,6 @@ class TTSProvider(TTSProviderBase):
         self.host = "api.coze.cn"
         self.api_url = f"https://{self.host}/v1/audio/speech"
 
-    def generate_filename(self, extension=".wav"):
-        return os.path.join(
-            self.output_file,
-            f"tts-{datetime.now().date()}@{uuid.uuid4().hex}{extension}",
-        )
-
     async def text_to_speak(self, text, output_file):
         request_json = {
             "model": self.model,
@@ -38,9 +27,13 @@ class TTSProvider(TTSProviderBase):
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
-        response = requests.request(
-            "POST", self.api_url, json=request_json, headers=headers
-        )
-        data = response.content
-        file_to_save = open(output_file, "wb")
-        file_to_save.write(data)
+
+        try:
+            response = requests.request(
+                "POST", self.api_url, json=request_json, headers=headers
+            )
+            data = response.content
+            file_to_save = open(output_file, "wb")
+            file_to_save.write(data)
+        except Exception as e:
+            raise Exception(f"{__name__} error: {e}")

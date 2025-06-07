@@ -73,11 +73,4 @@ class TTSProvider(TTSProviderBase):
             )
         except Exception as e:
             print("error:", e)
-
-        audio_content = requests.get(result)
-        with open(output_file, "wb") as f:
-            f.write(audio_content.content)
-            return True
-        voice_path = resp_json.get("voice_path")
-        des_path = output_file
-        shutil.move(voice_path, des_path)
+            raise Exception(f"{__name__}: TTS请求失败")

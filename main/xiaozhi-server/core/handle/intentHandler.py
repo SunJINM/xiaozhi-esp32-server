@@ -1,9 +1,9 @@
-from config.logger import setup_logging
 import json
 import uuid
 from core.handle.sendAudioHandle import send_stt_message
 from core.handle.helloHandle import checkWakeupWords
 from core.utils.util import remove_punctuation_and_length
+from core.providers.tts.dto.dto import ContentType
 from core.utils.dialogue import Message
 from loguru import logger
 
@@ -95,6 +95,7 @@ async def process_intent_result(conn, intent_result, original_text):
             }
 
             await send_stt_message(conn, original_text)
+            conn.client_abort = False
 
             # 使用executor执行函数调用和结果处理
             def process_function_call():
@@ -102,24 +103,35 @@ async def process_intent_result(conn, intent_result, original_text):
                 result = conn.func_handler.handle_llm_function_call(
                     conn, function_call_data
                 )
-                if result and function_name != "play_music":
-                    # 获取当前最新的文本索引
-                    text = result.response
-                    if text is None:
+                logger.bind(tag=TAG).debug(f"检测到Action : {result.action}")
+
+                if result:
+                    if result.action == Action.RESPONSE:  # 直接回复前端
+                        text = result.response
+                        if text is not None:
+                            speak_txt(conn, text)
+                    elif result.action == Action.REQLLM:  # 调用函数后再请求llm生成回复
                         text = result.result
-                    if text is not None:
-                        text_index = (
-                            conn.tts_last_text_index + 1
-                            if hasattr(conn, "tts_last_text_index")
-                            else 0
-                        )
-                        conn.recode_first_last_text(text, text_index)
-                        future = conn.executor.submit(
-                            conn.speak_and_play, text, text_index
-                        )
-                        conn.llm_finish_task = True
-                        conn.tts_queue.put(future)
-                        conn.dialogue.put(Message(role="assistant", content=text))
+                        conn.dialogue.put(Message(role="tool", content=text))
+                        llm_result = conn.intent.replyResult(text, original_text)
+                        if llm_result is None:
+                            llm_result = text
+                        speak_txt(conn, llm_result)
+                    elif (
+                        result.action == Action.NOTFOUND
+                        or result.action == Action.ERROR
+                    ):
+                        text = result.result
+                        if text is not None:
+                            speak_txt(conn, text)
+                    elif function_name != "play_music":
+                        # For backward compatibility with original code
+                        # 获取当前最新的文本索引
+                        text = result.response
+                        if text is None:
+                            text = result.result
+                        if text is not None:
+                            speak_txt(conn, text)
 
             # 将函数执行放在线程池中
             conn.executor.submit(process_function_call)
@@ -130,21 +142,6 @@ async def process_intent_result(conn, intent_result, original_text):
         return False
 
 
-def extract_text_in_brackets(s):
-    """
-    从字符串中提取中括号内的文字
-
-    :param s: 输入字符串
-    :return: 中括号内的文字，如果不存在则返回空字符串
-    """
-    left_bracket_index = s.find("[")
-    right_bracket_index = s.find("]")
-
-    if (
-        left_bracket_index != -1
-        and right_bracket_index != -1
-        and left_bracket_index < right_bracket_index
-    ):
-        return s[left_bracket_index + 1 : right_bracket_index]
-    else:
-        return ""
+def speak_txt(conn, text):
+    conn.tts.tts_one_sentence(conn, ContentType.TEXT, content_detail=text)
+    conn.dialogue.put(Message(role="assistant", content=text))

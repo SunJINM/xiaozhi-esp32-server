@@ -56,6 +56,7 @@ class FunctionHandler:
         # self.function_registry.register_function("handle_device")
         # self.function_registry.register_function("get_book_info")
         self.function_registry.register_function("get_class_info")
+        # self.function_registry.register_function("handle_speaker_volume_or_screen_brightness")
 
     def register_config_functions(self):
         """注册配置中的函数,可以不同客户端使用不同的配置"""

@@ -109,6 +109,59 @@ class AsyncPerformanceTester:
             print(f"⚠️ {tts_name} 测试失败: {str(e)}")
             return {"name": tts_name, "type": "tts", "errors": 1}
 
+    async def _test_stt(self, stt_name: str, config: Dict) -> Dict:
+        """异步测试单个STT性能"""
+        try:
+            logging.getLogger("core.providers.asr.base").setLevel(logging.WARNING)
+            token_fields = ["access_token", "api_key", "token"]
+            if any(
+                field in config
+                and any(x in config[field] for x in ["你的", "placeholder"])
+                for field in token_fields
+            ):
+                print(f"⏭️  STT {stt_name} 未配置access_token/api_key，已跳过")
+                return {"name": stt_name, "type": "stt", "errors": 1}
+
+            module_type = config.get("type", stt_name)
+            stt = create_stt_instance(module_type, config, delete_audio_file=True)
+            stt.audio_format = "pcm"
+
+            print(f"🎵 测试 STT: {stt_name}")
+
+            text, _ = await stt.speech_to_text(
+                [self.test_wav_list[0]], "1", stt.audio_format
+            )
+
+            if text is None:
+                print(f"❌ {stt_name} 连接失败")
+                return {"name": stt_name, "type": "stt", "errors": 1}
+
+            total_time = 0
+            test_count = len(self.test_wav_list)
+
+            for i, sentence in enumerate(self.test_wav_list, 1):
+                start = time.time()
+                text, _ = await stt.speech_to_text([sentence], "1", stt.audio_format)
+                duration = time.time() - start
+                total_time += duration
+
+                if text:
+                    print(f"✓ {stt_name} [{i}/{test_count}]")
+                else:
+                    print(f"✗ {stt_name} [{i}/{test_count}]")
+                    return {"name": stt_name, "type": "stt", "errors": 1}
+
+            return {
+                "name": stt_name,
+                "type": "stt",
+                "avg_time": total_time / test_count,
+                "errors": 0,
+            }
+
+        except Exception as e:
+            print(f"⚠️ {stt_name} 测试失败: {str(e)}")
+            return {"name": stt_name, "type": "stt", "errors": 1}
+
     async def _test_llm(self, llm_name: str, config: Dict) -> Dict:
         """异步测试单个LLM性能"""
         try:

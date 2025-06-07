@@ -5,11 +5,8 @@ import json
 import time
 from datetime import datetime, timezone
 import os
-import uuid
 from typing import Optional, Tuple, List
-import wave
-import opuslib_next
-
+from core.providers.asr.dto.dto import InterfaceType
 import requests
 from core.providers.asr.base import ASRProviderBase
 from config.logger import setup_logging
@@ -23,6 +20,8 @@ class ASRProvider(ASRProviderBase):
     FORMAT = "pcm"  # 支持的音频格式：pcm, wav, mp3
 
     def __init__(self, config: dict, delete_audio_file: bool = True):
+        super().__init__()
+        self.interface_type = InterfaceType.NON_STREAM
         self.secret_id = config.get("secret_id")
         self.secret_key = config.get("secret_key")
         self.output_dir = config.get("output_dir")
@@ -30,48 +29,9 @@ class ASRProvider(ASRProviderBase):
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def save_audio_to_file(self, opus_data: List[bytes], session_id: str) -> str:
-        """将Opus音频数据解码并保存为WAV文件"""
-
-        file_name = f"tencent_asr_{session_id}_{uuid.uuid4()}.wav"
-        file_path = os.path.join(self.output_dir, file_name)
-        
-        decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, 单声道
-        pcm_data = []
-        
-        for opus_packet in opus_data:
-            try:
-                pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
-                pcm_data.append(pcm_frame)
-            except opuslib_next.OpusError as e:
-                logger.bind(tag=TAG).error(f"Opus解码错误: {e}", exc_info=True)
-        
-        with wave.open(file_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)  # 2 bytes = 16-bit
-            wf.setframerate(16000)
-            wf.writeframes(b"".join(pcm_data))
-        
-        return file_path
-
-    @staticmethod
-    def decode_opus(opus_data: List[bytes]) -> bytes:
-        """将Opus音频数据解码为PCM数据"""
-        import opuslib_next
-        
-        decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, 单声道
-        pcm_data = []
-        
-        for opus_packet in opus_data:
-            try:
-                pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
-                pcm_data.append(pcm_frame)
-            except opuslib_next.OpusError as e:
-                logger.bind(tag=TAG).error(f"Opus解码错误: {e}", exc_info=True)
-        
-        return b"".join(pcm_data)
-
-    async def speech_to_text(self, opus_data: List[bytes], session_id: str) -> Tuple[Optional[str], Optional[str]]:
+    async def speech_to_text(
+        self, opus_data: List[bytes], session_id: str, audio_format="opus"
+    ) -> Tuple[Optional[str], Optional[str]]:
         """将语音数据转换为文本"""
         if not opus_data:
             logger.bind(tag=TAG).warn("音频数据为空！")
@@ -84,8 +44,18 @@ class ASRProvider(ASRProviderBase):
                 return None, None
 
             # 将Opus音频数据解码为PCM
-            pcm_data = self.decode_opus(opus_data)
-            
+            if audio_format == "pcm":
+                pcm_data = opus_data
+            else:
+                pcm_data = self.decode_opus(opus_data)
+            combined_pcm_data = b"".join(pcm_data)
+
+            # 判断是否保存为WAV文件
+            if self.delete_audio_file:
+                pass
+            else:
+                self.save_audio_to_file(pcm_data, session_id)
+
             # 将音频数据转换为Base64编码
             base64_audio = base64.b64encode(pcm_data).decode('utf-8')
 

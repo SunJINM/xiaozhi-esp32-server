@@ -57,8 +57,12 @@ class IntentProvider(IntentProviderBase):
             '返回: {"function_call": {"name": "get_time"}}\n'
             "```\n"
             "```\n"
-            "用户: 我们明天再聊吧\n"
-            '返回: {"function_call": {"name": "handle_exit_intent"}}\n'
+            "用户: 当前电池电量是多少？\n"
+            '返回: {"function_call": {"name": "get_battery_level", "arguments": {"response_success": "当前电池电量为{value}%", "response_failure": "无法获取Battery的当前电量百分比"}}}\n'
+            "```\n"
+            "```\n"
+            "用户: 我想结束对话\n"
+            '返回: {"function_call": {"name": "handle_exit_intent", "arguments": {"say_goodbye": "goodbye"}}}\n'
             "```\n"
             "```\n"
             "用户: 播放中秋月\n"
@@ -93,6 +97,8 @@ class IntentProvider(IntentProviderBase):
     async def detect_intent(self, conn, dialogue_history: List[Dict], text: str) -> str:
         if not self.llm:
             raise ValueError("LLM provider not set")
+        if conn.func_handler is None:
+            return '{"function_call": {"name": "continue_chat"}}'
 
         # 记录整体开始时间
         total_start_time = time.time()
@@ -118,7 +124,24 @@ class IntentProvider(IntentProviderBase):
         # 清理缓存
         self.clean_cache()
 
-        # 构建用户最后一句话的提示
+        if self.promot == "":
+            functions = conn.func_handler.get_functions()
+            self.promot = self.get_intent_system_prompt(functions)
+
+        music_config = initialize_music_handler(conn)
+        music_file_names = music_config["music_file_names"]
+        prompt_music = f"{self.promot}\n<musicNames>{music_file_names}\n</musicNames>"
+
+        devices = conn.config["plugins"]["home_assistant"].get("devices", [])
+        if len(devices) > 0:
+            hass_prompt = "\n下面是我家智能设备列表（位置，设备名，entity_id），可以通过homeassistant控制\n"
+            for device in devices:
+                hass_prompt += device + "\n"
+            prompt_music += hass_prompt
+
+        logger.bind(tag=TAG).debug(f"User prompt: {prompt_music}")
+
+        # 构建用户对话历史的提示
         msgStr = ""
 
         # 只使用最后两句即可
@@ -181,6 +204,16 @@ class IntentProvider(IntentProviderBase):
                 logger.bind(tag=TAG).info(
                     f"识别到function call: {function_name}, 参数: {function_args}"
                 )
+
+                # 如果是继续聊天，清理工具调用相关的历史消息
+                if function_name == "continue_chat":
+                    # 保留非工具相关的消息
+                    clean_history = [
+                        msg
+                        for msg in conn.dialogue.dialogue
+                        if msg.role not in ["tool", "function"]
+                    ]
+                    conn.dialogue.dialogue = clean_history
 
                 # 添加到缓存
                 self.intent_cache[cache_key] = {

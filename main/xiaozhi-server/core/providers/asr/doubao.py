@@ -1,17 +1,14 @@
 import time
-import io
-import wave
 import os
-from typing import Optional, Tuple, List
 import uuid
-import websockets
 import json
 import gzip
-
-import opuslib_next
-from core.providers.asr.base import ASRProviderBase
-
+import websockets
 from config.logger import setup_logging
+from typing import Optional, Tuple, List
+from core.providers.asr.base import ASRProviderBase
+from core.providers.asr.dto.dto import InterfaceType
+
 
 TAG = __name__
 logger = setup_logging()
@@ -85,6 +82,8 @@ def parse_response(res):
 
 class ASRProvider(ASRProviderBase):
     def __init__(self, config: dict, delete_audio_file: bool):
+        super().__init__()
+        self.interface_type = InterfaceType.NON_STREAM
         self.appid = config.get("appid")
         self.cluster = config.get("cluster")
         self.access_token = config.get("access_token")
@@ -97,29 +96,6 @@ class ASRProvider(ASRProviderBase):
 
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
-
-    def save_audio_to_file(self, opus_data: List[bytes], session_id: str) -> str:
-        """将Opus音频数据解码并保存为WAV文件"""
-        file_name = f"asr_{session_id}_{uuid.uuid4()}.wav"
-        file_path = os.path.join(self.output_dir, file_name)
-
-        decoder = opuslib_next.Decoder(16000, 1)  # 16kHz, 单声道
-        pcm_data = []
-
-        for opus_packet in opus_data:
-            try:
-                pcm_frame = decoder.decode(opus_packet, 960)  # 960 samples = 60ms
-                pcm_data.append(pcm_frame)
-            except opuslib_next.OpusError as e:
-                logger.bind(tag=TAG).error(f"Opus解码错误: {e}", exc_info=True)
-
-        with wave.open(file_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)  # 2 bytes = 16-bit
-            wf.setframerate(16000)
-            wf.writeframes(b"".join(pcm_data))
-
-        return file_path
 
     @staticmethod
     def _generate_header(message_type=CLIENT_FULL_REQUEST, message_type_specific_flags=NO_SEQUENCE) -> bytearray:
@@ -252,12 +228,17 @@ class ASRProvider(ASRProviderBase):
         else:
             yield data[offset: data_len], True
 
-    async def speech_to_text(self, opus_data: List[bytes], session_id: str) -> Tuple[Optional[str], Optional[str]]:
+    async def speech_to_text(
+        self, opus_data: List[bytes], session_id: str, audio_format="opus"
+    ) -> Tuple[Optional[str], Optional[str]]:
         """将语音数据转换为文本"""
         try:
             # 合并所有opus数据包
-            pcm_data = self.decode_opus(opus_data, session_id)
-            combined_pcm_data = b''.join(pcm_data)
+            if audio_format == "pcm":
+                pcm_data = opus_data
+            else:
+                pcm_data = self.decode_opus(opus_data)
+            combined_pcm_data = b"".join(pcm_data)
 
             wav_buffer = io.BytesIO()
 
