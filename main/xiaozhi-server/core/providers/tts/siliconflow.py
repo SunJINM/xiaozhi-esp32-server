@@ -39,12 +39,9 @@ class TTSProvider(TTSProviderBase):
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
-        try:
-            response = requests.request(
-                "POST", self.api_url, json=request_json, headers=headers
-            )
-            data = response.content
-            file_to_save = open(output_file, "wb")
-            file_to_save.write(data)
-        except Exception as e:
-            raise Exception(f"{__name__} error: {e}")
+        response = requests.request(
+            "POST", self.api_url, json=request_json, headers=headers
+        )
+        data = response.content
+        file_to_save = open(output_file, "wb")
+        file_to_save.write(data)

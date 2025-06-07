@@ -4,7 +4,6 @@ from config.logger import setup_logging
 TAG = __name__
 logger = setup_logging()
 
-
 class MemoryProviderBase(ABC):
     def __init__(self, config):
         self.config = config
@@ -21,6 +20,6 @@ class MemoryProviderBase(ABC):
         """Query memories for specific role based on similarity"""
         return "please implement query method"
 
-    def init_memory(self, role_id, llm, **kwargs):
-        self.role_id = role_id
+    def init_memory(self, role_id, llm):
+        self.role_id = role_id    
         self.llm = llm

@@ -49,7 +49,7 @@ services:
       - SPRING_DATA_REDIS_PORT=6379
     volumes:
       # 配置文件目录
-      - ./uploadfile:/uploadfile
+      - ./uploadfile:/app/uploadfile
 
   xiaozhi-esp32-server-db:
     image: mysql:latest
@@ -76,7 +76,6 @@ services:
     expose:
       - 6379
     container_name: xiaozhi-esp32-server-redis
-    restart: always
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

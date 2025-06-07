@@ -1,8 +1,6 @@
 import os
 import copy
 import json
-import subprocess
-import sys
 import uuid
 import time
 import queue
@@ -19,10 +17,8 @@ from core.handle.textHandle import handleTextMessage
 from core.utils.util import (
     get_string_no_punctuation_or_emoji,
     extract_json_from_string,
+    get_ip_info,
     initialize_modules,
-    check_vad_update,
-    check_asr_update,
-    filter_sensitive_info,
 )
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from core.handle.sendAudioHandle import sendAudioMessage
@@ -36,7 +32,6 @@ from core.mcp.manager import MCPManager
 from config.config_loader import get_private_config_from_api
 from config.manage_api_client import DeviceNotFoundException, DeviceBindException
 from core.utils.output_counter import add_device_output
-from core.handle.reportHandle import enqueue_tts_report, report
 
 TAG = __name__
 
@@ -49,36 +44,23 @@ class TTSException(RuntimeError):
 
 class ConnectionHandler:
     def __init__(
-        self,
-        config: Dict[str, Any],
-        _vad,
-        _asr,
-        _llm,
-        _tts,
-        _memory,
-        _intent,
-        server=None,
+        self, config: Dict[str, Any], _vad, _asr, _llm, _tts, _memory, _intent
     ):
-        self.common_config = config
         self.config = copy.deepcopy(config)
-        self.session_id = str(uuid.uuid4())
         self.logger = setup_logging()
-        self.server = server  # 保存server实例的引用
-
         self.auth = AuthMiddleware(config)
+
         self.need_bind = False
         self.bind_code = None
-        self.read_config_from_api = self.config.get("read_config_from_api", False)
 
         self.websocket = None
         self.headers = None
-        self.device_id = None
         self.client_ip = None
         self.client_ip_info = {}
+        self.session_id = None
         self.prompt = None
         self.welcome_msg = None
         self.max_output_size = 0
-        self.chat_history_conf = 0
 
         # 客户端状态相关
         self.client_abort = False
@@ -91,18 +73,9 @@ class ConnectionHandler:
         self.audio_play_queue = queue.Queue()
         self.executor = ThreadPoolExecutor(max_workers=10)
 
-        # 上报线程
-        self.report_queue = queue.Queue()
-        self.report_thread = None
-        # TODO(haotian): 2025/5/12 可以通过修改此处，调节asr的上报和tts的上报
-        self.report_asr_enable = self.read_config_from_api
-        self.report_tts_enable = self.read_config_from_api
-
         # 依赖的组件
-        self.vad = None
-        self.asr = None
-        self._asr = _asr
-        self._vad = _vad
+        self.vad = _vad
+        self.asr = _asr
         self.llm = _llm
         self.tts = _tts
         self.memory = _memory
@@ -142,17 +115,13 @@ class ConnectionHandler:
             if len(cmd) > self.max_cmd_length:
                 self.max_cmd_length = len(cmd)
 
-        # 是否在聊天结束后关闭连接
-        self.close_after_chat = False
-        self.load_function_plugin = False
-        self.intent_type = "nointent"
+        self.close_after_chat = False  # 是否在聊天结束后关闭连接
+        self.use_function_call_mode = False
 
         self.timeout_task = None
         self.timeout_seconds = (
             int(self.config.get("close_connection_no_voice_time", 120)) + 60
         )  # 在原来第一道关闭的基础上加60秒，进行二道关闭
-
-        self.audio_format = "opus"
 
     async def handle_connection(self, ws):
         try:
@@ -174,9 +143,11 @@ class ConnectionHandler:
                     self.headers["device-id"] = query_params["device-id"][0]
                     self.headers["client-id"] = query_params["client-id"][0]
                 else:
-                    await ws.send("端口正常，如需测试连接，请使用test_page.html")
-                    await self.close(ws)
+                    self.logger.bind(tag=TAG).error(
+                        "无法从请求头和URL查询参数中获取device-id"
+                    )
                     return
+
             # 获取客户端ip地址
             self.client_ip = ws.remote_address[0]
             self.logger.bind(tag=TAG).info(
@@ -188,7 +159,7 @@ class ConnectionHandler:
 
             # 认证通过,继续处理
             self.websocket = ws
-            self.device_id = self.headers.get("device-id", None)
+            self.session_id = str(uuid.uuid4())
 
             # 启动超时检查任务
             self.timeout_task = asyncio.create_task(self._check_timeout())
@@ -198,9 +169,9 @@ class ConnectionHandler:
             await self.websocket.send(json.dumps(self.welcome_msg))
 
             # 获取差异化配置
-            self._initialize_private_config()
+            private_config = self._initialize_private_config()
             # 异步初始化
-            self.executor.submit(self._initialize_components)
+            self.executor.submit(self._initialize_components, private_config)
             # tts 消化线程
             self.tts_priority_thread = threading.Thread(
                 target=self._tts_priority_thread, daemon=True
@@ -232,130 +203,40 @@ class ConnectionHandler:
     async def _save_and_close(self, ws):
         """保存记忆并关闭连接"""
         try:
-            if self.memory:
-                # 使用线程池异步保存记忆
-                def save_memory_task():
-                    try:
-                        # 创建新事件循环（避免与主循环冲突）
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        loop.run_until_complete(
-                            self.memory.save_memory(self.dialogue.dialogue)
-                        )
-                    except Exception as e:
-                        self.logger.bind(tag=TAG).error(f"保存记忆失败: {e}")
-                    finally:
-                        loop.close()
-
-                # 启动线程保存记忆，不等待完成
-                threading.Thread(target=save_memory_task, daemon=True).start()
+            await self.memory.save_memory(self.dialogue.dialogue)
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"保存记忆失败: {e}")
         finally:
-            # 立即关闭连接，不等待记忆保存完成
             await self.close(ws)
-
-    async def reset_timeout(self):
-        """重置超时计时器"""
-        if self.timeout_task:
-            self.timeout_task.cancel()
-        self.timeout_task = asyncio.create_task(self._check_timeout())
 
     async def _route_message(self, message):
         """消息路由"""
         # 重置超时计时器
-        await self.reset_timeout()
+        if self.timeout_task:
+            self.timeout_task.cancel()
+            self.timeout_task = asyncio.create_task(self._check_timeout())
 
         if isinstance(message, str):
             await handleTextMessage(self, message)
         elif isinstance(message, bytes):
             await handleAudioMessage(self, message)
 
-    async def handle_restart(self, message):
-        """处理服务器重启请求"""
-        try:
-
-            self.logger.bind(tag=TAG).info("收到服务器重启指令，准备执行...")
-
-            # 发送确认响应
-            await self.websocket.send(
-                json.dumps(
-                    {
-                        "type": "server",
-                        "status": "success",
-                        "message": "服务器重启中...",
-                        "content": {"action": "restart"},
-                    }
-                )
-            )
-
-            # 异步执行重启操作
-            def restart_server():
-                """实际执行重启的方法"""
-                time.sleep(1)
-                self.logger.bind(tag=TAG).info("执行服务器重启...")
-                subprocess.Popen(
-                    [sys.executable, "app.py"],
-                    stdin=sys.stdin,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr,
-                    start_new_session=True,
-                )
-                os._exit(0)
-
-            # 使用线程执行重启避免阻塞事件循环
-            threading.Thread(target=restart_server, daemon=True).start()
-
-        except Exception as e:
-            self.logger.bind(tag=TAG).error(f"重启失败: {str(e)}")
-            await self.websocket.send(
-                json.dumps(
-                    {
-                        "type": "server",
-                        "status": "error",
-                        "message": f"Restart failed: {str(e)}",
-                        "content": {"action": "restart"},
-                    }
-                )
-            )
-
-    def _initialize_components(self):
+    def _initialize_components(self, private_config):
         """初始化组件"""
-        if self.config.get("prompt") is not None:
+        if private_config is not None:
+            self._initialize_models(private_config)
+        else:
             self.prompt = self.config["prompt"]
             self.change_system_prompt(self.prompt)
-            self.logger.bind(tag=TAG).info(
-                f"初始化组件: prompt成功 {self.prompt[:50]}..."
-            )
-
-        """初始化本地组件"""
-        if self.vad is None:
-            self.vad = self._vad
-        if self.asr is None:
-            self.asr = self._asr
         """加载记忆"""
         self._initialize_memory()
         """加载意图识别"""
         self._initialize_intent()
-        """初始化上报线程"""
-        self._init_report_threads()
-
-    def _init_report_threads(self):
-        """初始化ASR和TTS上报线程"""
-        if not self.read_config_from_api or self.need_bind:
-            return
-        if self.chat_history_conf == 0:
-            return
-        if self.report_thread is None or not self.report_thread.is_alive():
-            self.report_thread = threading.Thread(
-                target=self._report_worker, daemon=True
-            )
-            self.report_thread.start()
-            self.logger.bind(tag=TAG).info("TTS上报线程已启动")
 
     def _initialize_private_config(self):
+        read_config_from_api = self.config.get("read_config_from_api", False)
         """如果是从配置文件获取，则进行二次实例化"""
-        if not self.read_config_from_api:
+        if not read_config_from_api:
             return
         """从接口获取差异化的配置进行二次实例化，非全量重新实例化"""
         try:
@@ -367,7 +248,7 @@ class ConnectionHandler:
             )
             private_config["delete_audio"] = bool(self.config.get("delete_audio", True))
             self.logger.bind(tag=TAG).info(
-                f"{time.time() - begin_time} 秒，获取差异化配置成功: {json.dumps(filter_sensitive_info(private_config), ensure_ascii=False)}"
+                f"{time.time() - begin_time} 秒，获取差异化配置成功: {private_config}"
             )
         except DeviceNotFoundException as e:
             self.need_bind = True
@@ -381,21 +262,54 @@ class ConnectionHandler:
             self.logger.bind(tag=TAG).error(f"获取差异化配置失败: {e}")
             private_config = {}
 
-        init_llm, init_tts, init_memory, init_intent = (
-            False,
-            False,
-            False,
-            False,
-        )
-
-        init_vad = check_vad_update(self.common_config, private_config)
-        init_asr = check_asr_update(self.common_config, private_config)
-
+        init_tts = False
         if private_config.get("TTS", None) is not None:
             init_tts = True
             self.config["TTS"] = private_config["TTS"]
             self.config["selected_module"]["TTS"] = private_config["selected_module"][
                 "TTS"
+            ]
+
+        try:
+            modules = initialize_modules(
+                self.logger,
+                private_config,
+                False,
+                False,
+                False,
+                init_tts,
+                False,
+                False,
+            )
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
+            modules = {}
+        if modules.get("tts", None) is not None:
+            self.tts = modules["tts"]
+        if modules.get("prompt", None) is not None:
+            self.change_system_prompt(modules["prompt"])
+            private_config["prompt"] = None
+        return private_config
+
+    def _initialize_models(self, private_config):
+        init_vad, init_asr, init_llm, init_memory, init_intent = (
+            False,
+            False,
+            False,
+            False,
+            False,
+        )
+        if private_config.get("VAD", None) is not None:
+            init_vad = True
+            self.config["VAD"] = private_config["VAD"]
+            self.config["selected_module"]["VAD"] = private_config["selected_module"][
+                "VAD"
+            ]
+        if private_config.get("ASR", None) is not None:
+            init_asr = True
+            self.config["ASR"] = private_config["ASR"]
+            self.config["selected_module"]["ASR"] = private_config["selected_module"][
+                "ASR"
             ]
         if private_config.get("LLM", None) is not None:
             init_llm = True
@@ -415,14 +329,8 @@ class ConnectionHandler:
             self.config["selected_module"]["Intent"] = private_config[
                 "selected_module"
             ]["Intent"]
-        if private_config.get("prompt", None) is not None:
-            self.config["prompt"] = private_config["prompt"]
-        if private_config.get("summaryMemory", None) is not None:
-            self.config["summaryMemory"] = private_config["summaryMemory"]
         if private_config.get("device_max_output_size", None) is not None:
             self.max_output_size = int(private_config["device_max_output_size"])
-        if private_config.get("chat_history_conf", None) is not None:
-            self.chat_history_conf = int(private_config["chat_history_conf"])
         try:
             modules = initialize_modules(
                 self.logger,
@@ -430,15 +338,13 @@ class ConnectionHandler:
                 init_vad,
                 init_asr,
                 init_llm,
-                init_tts,
+                False,
                 init_memory,
                 init_intent,
             )
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"初始化组件失败: {e}")
             modules = {}
-        if modules.get("tts", None) is not None:
-            self.tts = modules["tts"]
         if modules.get("vad", None) is not None:
             self.vad = modules["vad"]
         if modules.get("asr", None) is not None:
@@ -452,19 +358,15 @@ class ConnectionHandler:
 
     def _initialize_memory(self):
         """初始化记忆模块"""
-        self.memory.init_memory(
-            role_id=self.device_id,
-            llm=self.llm,
-            summary_memory=self.config.get("summaryMemory", None),
-            save_to_file=not self.read_config_from_api,
-        )
+        device_id = self.headers.get("device-id", None)
+        self.memory.init_memory(device_id, self.llm)
 
     def _initialize_intent(self):
-        self.intent_type = self.config["Intent"][
-            self.config["selected_module"]["Intent"]
-        ]["type"]
-        if self.intent_type == "function_call" or self.intent_type == "intent_llm":
-            self.load_function_plugin = True
+        if (
+            self.config["Intent"][self.config["selected_module"]["Intent"]]["type"]
+            == "function_call"
+        ):
+            self.use_function_call_mode = True
         """初始化意图识别模块"""
         # 获取意图识别配置
         intent_config = self.config["Intent"]
@@ -526,12 +428,10 @@ class ConnectionHandler:
         processed_chars = 0  # 跟踪已处理的字符位置
         try:
             # 使用带记忆的对话
-            memory_str = None
-            if self.memory is not None:
-                future = asyncio.run_coroutine_threadsafe(
-                    self.memory.query_memory(query), self.loop
-                )
-                memory_str = future.result()
+            future = asyncio.run_coroutine_threadsafe(
+                self.memory.query_memory(query), self.loop
+            )
+            memory_str = future.result()
 
             self.logger.bind(tag=TAG).debug(f"记忆内容: {memory_str}")
             llm_responses = self.llm.response(
@@ -553,16 +453,11 @@ class ConnectionHandler:
             current_text = full_text[processed_chars:]  # 从未处理的位置开始
 
             # 查找最后一个有效标点
-            punctuations = ("。", ".", "？", "?", "！", "!", "；", ";", "：")
+            punctuations = ("。", "？", "！", "；", "：")
             last_punct_pos = -1
-            number_flag = True
             for punct in punctuations:
                 pos = current_text.rfind(punct)
-                prev_char = current_text[pos - 1] if pos - 1 >= 0 else ""
-                # 如果.前面是数字统一判断为小数
-                if prev_char.isdigit() and punct == ".":
-                    number_flag = False
-                if pos > last_punct_pos and number_flag:
+                if pos > last_punct_pos:
                     last_punct_pos = pos
 
             # 找到分割点则处理
@@ -578,7 +473,7 @@ class ConnectionHandler:
                     future = self.executor.submit(
                         self.speak_and_play, segment_text, text_index
                     )
-                    self.tts_queue.put((future, text_index))
+                    self.tts_queue.put(future)
                     processed_chars += len(segment_text_raw)  # 更新已处理字符位置
 
         # 处理最后剩余的文本
@@ -592,7 +487,7 @@ class ConnectionHandler:
                 future = self.executor.submit(
                     self.speak_and_play, segment_text, text_index
                 )
-                self.tts_queue.put((future, text_index))
+                self.tts_queue.put(future)
 
         self.llm_finish_task = True
         self.dialogue.put(Message(role="assistant", content="".join(response_message)))
@@ -619,12 +514,10 @@ class ConnectionHandler:
             start_time = time.time()
 
             # 使用带记忆的对话
-            memory_str = None
-            if self.memory is not None:
-                future = asyncio.run_coroutine_threadsafe(
-                    self.memory.query_memory(query), self.loop
-                )
-                memory_str = future.result()
+            future = asyncio.run_coroutine_threadsafe(
+                self.memory.query_memory(query), self.loop
+            )
+            memory_str = future.result()
 
             # self.logger.bind(tag=TAG).info(f"对话记录: {self.dialogue.get_llm_dialogue_with_memory(memory_str)}")
 
@@ -688,16 +581,11 @@ class ConnectionHandler:
                     current_text = full_text[processed_chars:]  # 从未处理的位置开始
 
                     # 查找最后一个有效标点
-                    punctuations = ("。", ".", "？", "?", "！", "!", "；", ";", "：")
+                    punctuations = ("。", "？", "！", "；", "：")
                     last_punct_pos = -1
-                    number_flag = True
                     for punct in punctuations:
                         pos = current_text.rfind(punct)
-                        prev_char = current_text[pos - 1] if pos - 1 >= 0 else ""
-                        # 如果.前面是数字统一判断为小数
-                        if prev_char.isdigit() and punct == ".":
-                            number_flag = False
-                        if pos > last_punct_pos and number_flag:
+                        if pos > last_punct_pos:
                             last_punct_pos = pos
 
                     # 找到分割点则处理
@@ -712,7 +600,7 @@ class ConnectionHandler:
                             future = self.executor.submit(
                                 self.speak_and_play, segment_text, text_index
                             )
-                            self.tts_queue.put((future, text_index))
+                            self.tts_queue.put(future)
                             # 更新已处理字符位置
                             processed_chars += len(segment_text_raw)
 
@@ -776,7 +664,7 @@ class ConnectionHandler:
                 future = self.executor.submit(
                     self.speak_and_play, segment_text, text_index
                 )
-                self.tts_queue.put((future, text_index))
+                self.tts_queue.put(future)
 
         # 存储对话内容
         if len(response_message) > 0:
@@ -1025,7 +913,7 @@ class ConnectionHandler:
             text = result.response
             self.recode_first_last_text(text, text_index)
             future = self.executor.submit(self.speak_and_play, text, text_index)
-            self.tts_queue.put((future, text_index))
+            self.tts_queue.put(future)
             self.dialogue.put(Message(role="assistant", content=text))
         elif result.action == Action.REQLLM:  # 调用函数后再请求llm生成回复
             text = result.result
@@ -1051,20 +939,14 @@ class ConnectionHandler:
                 )
 
                 self.dialogue.put(
-                    Message(
-                        role="tool",
-                        tool_call_id=(
-                            str(uuid.uuid4()) if function_id is None else function_id
-                        ),
-                        content=text,
-                    )
+                    Message(role="tool", tool_call_id=function_id, content=text)
                 )
                 self.chat_with_function_calling(text, tool_call=True)
         elif result.action == Action.NOTFOUND or result.action == Action.ERROR:
             text = result.result
             self.recode_first_last_text(text, text_index)
             future = self.executor.submit(self.speak_and_play, text, text_index)
-            self.tts_queue.put((future, text_index))
+            self.tts_queue.put(future)
             self.dialogue.put(Message(role="assistant", content=text))
         else:
             pass
@@ -1074,10 +956,7 @@ class ConnectionHandler:
             text = None
             try:
                 try:
-                    item = self.tts_queue.get(timeout=1)
-                    if item is None:
-                        continue
-                    future, text_index = item  # 解包获取 Future 和 text_index
+                    future = self.tts_queue.get(timeout=1)
                 except queue.Empty:
                     if self.stop_event.is_set():
                         break
@@ -1085,11 +964,11 @@ class ConnectionHandler:
                 if future is None:
                     continue
                 text = None
-                audio_datas, tts_file = [], None
+                opus_datas, text_index, tts_file = [], 0, None
                 try:
                     self.logger.bind(tag=TAG).debug("正在处理TTS任务...")
                     tts_timeout = int(self.config.get("tts_timeout", 10))
-                    tts_file, text, _ = future.result(timeout=tts_timeout)
+                    tts_file, text, text_index = future.result(timeout=tts_timeout)
                     if text is None or len(text) <= 0:
                         self.logger.bind(tag=TAG).error(
                             f"TTS出错：{text_index}: tts text is empty"
@@ -1103,12 +982,7 @@ class ConnectionHandler:
                             f"TTS生成：文件路径: {tts_file}"
                         )
                         if os.path.exists(tts_file):
-                            if self.audio_format == "pcm":
-                                audio_datas, _ = self.tts.audio_to_pcm_data(tts_file)
-                            else:
-                                audio_datas, _ = self.tts.audio_to_opus_data(tts_file)
-                            # 在这里上报TTS数据
-                            enqueue_tts_report(self, text, audio_datas)
+                            opus_datas, duration = self.tts.audio_to_opus_data(tts_file)
                         else:
                             self.logger.bind(tag=TAG).error(
                                 f"TTS出错：文件不存在{tts_file}"
@@ -1119,7 +993,7 @@ class ConnectionHandler:
                     self.logger.bind(tag=TAG).error(f"TTS出错: {e}")
                 if not self.client_abort:
                     # 如果没有中途打断就发送语音
-                    self.audio_play_queue.put((audio_datas, text, text_index))
+                    self.audio_play_queue.put((opus_datas, text, text_index))
                 if (
                     self.tts.delete_audio_file
                     and tts_file is not None
@@ -1150,45 +1024,19 @@ class ConnectionHandler:
             text = None
             try:
                 try:
-                    audio_datas, text, text_index = self.audio_play_queue.get(timeout=1)
+                    opus_datas, text, text_index = self.audio_play_queue.get(timeout=1)
                 except queue.Empty:
                     if self.stop_event.is_set():
                         break
                     continue
                 future = asyncio.run_coroutine_threadsafe(
-                    sendAudioMessage(self, audio_datas, text, text_index), self.loop
+                    sendAudioMessage(self, opus_datas, text, text_index), self.loop
                 )
                 future.result()
             except Exception as e:
                 self.logger.bind(tag=TAG).error(
                     f"audio_play_priority priority_thread: {text} {e}"
                 )
-
-    def _report_worker(self):
-        """聊天记录上报工作线程"""
-        while not self.stop_event.is_set():
-            try:
-                # 从队列获取数据，设置超时以便定期检查停止事件
-                item = self.report_queue.get(timeout=1)
-                if item is None:  # 检测毒丸对象
-                    break
-
-                type, text, audio_data = item
-
-                try:
-                    # 执行上报（传入二进制数据）
-                    report(self, type, text, audio_data)
-                except Exception as e:
-                    self.logger.bind(tag=TAG).error(f"聊天记录上报线程异常: {e}")
-                finally:
-                    # 标记任务完成
-                    self.report_queue.task_done()
-            except queue.Empty:
-                continue
-            except Exception as e:
-                self.logger.bind(tag=TAG).error(f"聊天记录上报工作线程异常: {e}")
-
-        self.logger.bind(tag=TAG).info("聊天记录上报线程已退出")
 
     def speak_and_play(self, text, text_index=0):
         if text is None or len(text) <= 0:
@@ -1217,7 +1065,6 @@ class ConnectionHandler:
 
     async def close(self, ws=None):
         """资源清理方法"""
-
         # 取消超时任务
         if self.timeout_task:
             self.timeout_task.cancel()
@@ -1227,45 +1074,37 @@ class ConnectionHandler:
         if hasattr(self, "mcp_manager") and self.mcp_manager:
             await self.mcp_manager.cleanup_all()
 
-        # 触发停止事件
+        # 触发停止事件并清理资源
         if self.stop_event:
             self.stop_event.set()
 
-        # 清空任务队列
-        self.clear_queues()
+        # 立即关闭线程池
+        if self.executor:
+            self.executor.shutdown(wait=False, cancel_futures=True)
+            self.executor = None
 
-        # 关闭WebSocket连接
+        # 清空任务队列
+        self._clear_queues()
+
         if ws:
             await ws.close()
         elif self.websocket:
             await self.websocket.close()
-
-        # 最后关闭线程池（避免阻塞）
-        if self.executor:
-            self.executor.shutdown(wait=False)
-            self.executor = None
-
         self.logger.bind(tag=TAG).info("连接资源已释放")
 
-    def clear_queues(self):
-        """清空所有任务队列"""
-        self.logger.bind(tag=TAG).debug(
-            f"开始清理: TTS队列大小={self.tts_queue.qsize()}, 音频队列大小={self.audio_play_queue.qsize()}"
-        )
-
-        # 使用非阻塞方式清空队列
+    def _clear_queues(self):
+        # 清空所有任务队列
         for q in [self.tts_queue, self.audio_play_queue]:
             if not q:
                 continue
-            while True:
+            while not q.empty():
                 try:
                     q.get_nowait()
                 except queue.Empty:
-                    break
-
-        self.logger.bind(tag=TAG).debug(
-            f"清理结束: TTS队列大小={self.tts_queue.qsize()}, 音频队列大小={self.audio_play_queue.qsize()}"
-        )
+                    continue
+            q.queue.clear()
+            # 添加毒丸信号到队列，确保线程退出
+            # q.queue.put(None)
 
     def reset_vad_states(self):
         self.client_audio_buffer = bytearray()
