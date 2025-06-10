@@ -1,22 +1,16 @@
 from config.logger import setup_logging
 import json
-from plugins_func.register import (
-    FunctionRegistry,
-    ActionResponse,
-    Action,
-    ToolType,
-    DeviceTypeRegistry,
-)
+from plugins_func.register import FunctionRegistry, ActionResponse, Action, ToolType
 from plugins_func.functions.hass_init import append_devices_to_prompt
 
 TAG = __name__
+logger = setup_logging()
 
 
 class FunctionHandler:
     def __init__(self, conn):
         self.conn = conn
         self.config = conn.config
-        self.device_type_registry = DeviceTypeRegistry()
         self.function_registry = FunctionRegistry()
         self.register_nessary_functions()
         self.register_config_functions()
@@ -46,9 +40,7 @@ class FunctionHandler:
         for func in self.functions_desc:
             func_names.append(func["function"]["name"])
         # 打印当前支持的函数列表
-        self.conn.logger.bind(tag=TAG, session_id=self.conn.session_id).info(
-            f"当前支持的函数列表: {func_names}"
-        )
+        logger.bind(tag=TAG).info(f"当前支持的函数列表: {func_names}")
         return func_names
 
     def get_functions(self):
@@ -57,11 +49,13 @@ class FunctionHandler:
 
     def register_nessary_functions(self):
         """注册必要的函数"""
-        self.function_registry.register_function("handle_exit_intent")
-        self.function_registry.register_function("plugin_loader")
+        # self.function_registry.register_function("handle_exit_intent")
+        # self.function_registry.register_function("plugin_loader")
         self.function_registry.register_function("get_time")
         self.function_registry.register_function("get_lunar")
-        # self.function_registry.register_function("handle_speaker_volume_or_screen_brightness")
+        # self.function_registry.register_function("handle_device")
+        # self.function_registry.register_function("get_book_info")
+        self.function_registry.register_function("get_class_info")
 
     def register_config_functions(self):
         """注册配置中的函数,可以不同客户端使用不同的配置"""
@@ -87,9 +81,7 @@ class FunctionHandler:
             func = funcItem.func
             arguments = function_call_data["arguments"]
             arguments = json.loads(arguments) if arguments else {}
-            self.conn.logger.bind(tag=TAG).debug(
-                f"调用函数: {function_name}, 参数: {arguments}"
-            )
+            logger.bind(tag=TAG).debug(f"调用函数: {function_name}, 参数: {arguments}")
             if (
                 funcItem.type == ToolType.SYSTEM_CTL
                 or funcItem.type == ToolType.IOT_CTL
@@ -104,6 +96,6 @@ class FunctionHandler:
                     action=Action.NOTFOUND, result="没有找到对应的函数", response=""
                 )
         except Exception as e:
-            self.conn.logger.bind(tag=TAG).error(f"处理function call错误: {e}")
+            logger.bind(tag=TAG).error(f"处理function call错误: {e}")
 
         return None
