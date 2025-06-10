@@ -1,4 +1,7 @@
+import os
+import uuid
 import requests
+from datetime import datetime
 from core.utils.util import check_model_key
 from core.providers.tts.base import TTSProviderBase
 from config.logger import setup_logging
@@ -17,15 +20,16 @@ class TTSProvider(TTSProviderBase):
             self.voice = config.get("private_voice")
         else:
             self.voice = config.get("voice", "alloy")
-        self.response_format = config.get("format", "wav")
-        self.audio_file_type = config.get("format", "wav")
-
-        # 处理空字符串的情况
-        speed = config.get("speed", "1.0")
-        self.speed = float(speed) if speed else 1.0
-
+        self.response_format = "wav"
+        self.speed = float(config.get("speed", 1.0))
         self.output_file = config.get("output_dir", "tmp/")
         check_model_key("TTS", self.api_key)
+
+    def generate_filename(self, extension=".wav"):
+        return os.path.join(
+            self.output_file,
+            f"tts-{datetime.now().date()}@{uuid.uuid4().hex}{extension}",
+        )
 
     async def text_to_speak(self, text, output_file):
         headers = {
@@ -41,11 +45,8 @@ class TTSProvider(TTSProviderBase):
         }
         response = requests.post(self.api_url, json=data, headers=headers)
         if response.status_code == 200:
-            if output_file:
-                with open(output_file, "wb") as audio_file:
-                    audio_file.write(response.content)
-            else:
-                return response.content
+            with open(output_file, "wb") as audio_file:
+                audio_file.write(response.content)
         else:
             raise Exception(
                 f"OpenAI TTS请求失败: {response.status_code} - {response.text}"
