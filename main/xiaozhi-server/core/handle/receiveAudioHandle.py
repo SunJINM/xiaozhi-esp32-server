@@ -52,6 +52,19 @@ async def startToChat(conn, text):
     if conn.client_is_speaking:
         await handleAbortMessage(conn)
 
+    # 如果当前处于智能体中，判断是否需要退出智能体
+    conn.logger.bind(tag=TAG).info(f"当前所处智能体: {conn.use_agent_call}")
+    if conn.use_agent_call is not None:
+        # 判断是否需要退出智能体
+        result = conn.handle_agent_abort(text)
+        conn.logger.bind(tag=TAG).info(f"是否退出当前智能体: {result}")
+        if result == "True":
+            conn.use_agent_call = None
+            await abort_agent(conn)
+            return
+        conn.executor.submit(conn.chat_with_agent_calling, text, conn.use_agent_call)
+        return
+
     # 首先进行意图分析
     intent_handled = await handle_user_intent(conn, text)
 

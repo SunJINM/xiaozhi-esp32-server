@@ -19,6 +19,8 @@ from core.utils.util import (
 )
 from typing import Dict, Any
 from core.mcp.manager import MCPManager
+from core.agent.abort_prompt import get_abort_prompt_for_agent
+from core.agent.agent_manager import AgentManager
 from core.utils.modules_initialize import (
     initialize_modules,
     initialize_tts,
@@ -128,6 +130,11 @@ class ConnectionHandler:
 
         # tts相关变量
         self.sentence_id = None
+
+        # agent相关变量
+        self.use_agent_call = None
+        self.agent_handler = None
+        self.agent_dialogue = Dialogue()
 
         # iot相关变量
         self.iot_descriptors = {}
@@ -569,11 +576,16 @@ class ConnectionHandler:
 
         """加载插件"""
         self.func_handler = FunctionHandler(self)
-        self.mcp_manager = MCPManager(self)
+        # self.mcp_manager = MCPManager(self)
 
-        """加载MCP工具"""
+        # """加载MCP工具"""
+        # asyncio.run_coroutine_threadsafe(
+        #     self.mcp_manager.initialize_servers(), self.loop
+        # )
+        self.agent_handler = AgentManager(self)
+
         asyncio.run_coroutine_threadsafe(
-            self.mcp_manager.initialize_servers(), self.loop
+            self.agent_handler.initialize_servers(), self.loop
         )
 
     def change_system_prompt(self, prompt):
@@ -592,6 +604,8 @@ class ConnectionHandler:
         functions = None
         if self.intent_type == "function_call" and hasattr(self, "func_handler"):
             functions = self.func_handler.get_functions()
+
+        self.logger.bind(tag=TAG).info(f"可使用函数: {functions}")
         if hasattr(self, "mcp_client"):
             mcp_tools = self.mcp_client.get_available_tools()
             if mcp_tools is not None and len(mcp_tools) > 0:
@@ -716,36 +730,36 @@ class ConnectionHandler:
                 }
 
                 # 处理Server端MCP工具调用
-                if self.mcp_manager.is_mcp_tool(function_name):
-                    result = self._handle_mcp_tool_call(function_call_data)
-                elif hasattr(self, "mcp_client") and self.mcp_client.has_tool(
-                    function_name
-                ):
-                    # 如果是小智端MCP工具调用
-                    self.logger.bind(tag=TAG).debug(
-                        f"调用小智端MCP工具: {function_name}, 参数: {function_arguments}"
-                    )
-                    try:
-                        result = asyncio.run_coroutine_threadsafe(
-                            call_mcp_tool(
-                                self, self.mcp_client, function_name, function_arguments
-                            ),
-                            self.loop,
-                        ).result()
-                        self.logger.bind(tag=TAG).debug(f"MCP工具调用结果: {result}")
-                        result = ActionResponse(
-                            action=Action.REQLLM, result=result, response=""
-                        )
-                    except Exception as e:
-                        self.logger.bind(tag=TAG).error(f"MCP工具调用失败: {e}")
-                        result = ActionResponse(
-                            action=Action.REQLLM, result="MCP工具调用失败", response=""
-                        )
-                else:
-                    # 处理系统函数
-                    result = self.func_handler.handle_llm_function_call(
-                        self, function_call_data
-                    )
+                # if self.mcp_manager.is_mcp_tool(function_name):
+                #     result = self._handle_mcp_tool_call(function_call_data)
+                # elif hasattr(self, "mcp_client") and self.mcp_client.has_tool(
+                #     function_name
+                # ):
+                #     # 如果是小智端MCP工具调用
+                #     self.logger.bind(tag=TAG).debug(
+                #         f"调用小智端MCP工具: {function_name}, 参数: {function_arguments}"
+                #     )
+                #     try:
+                #         result = asyncio.run_coroutine_threadsafe(
+                #             call_mcp_tool(
+                #                 self, self.mcp_client, function_name, function_arguments
+                #             ),
+                #             self.loop,
+                #         ).result()
+                #         self.logger.bind(tag=TAG).debug(f"MCP工具调用结果: {result}")
+                #         result = ActionResponse(
+                #             action=Action.REQLLM, result=result, response=""
+                #         )
+                #     except Exception as e:
+                #         self.logger.bind(tag=TAG).error(f"MCP工具调用失败: {e}")
+                #         result = ActionResponse(
+                #             action=Action.REQLLM, result="MCP工具调用失败", response=""
+                #         )
+                # else:
+                # 处理系统函数
+                result = self.func_handler.handle_llm_function_call(
+                    self, function_call_data
+                )
                 self._handle_function_result(result, function_call_data)
 
         # 存储对话内容
@@ -767,6 +781,157 @@ class ConnectionHandler:
         )
 
         return True
+
+    def chat_with_agent_calling(self, query, agent_type):
+        self.logger.bind(tag=TAG).debug(f"Chat with agent calling start: {query}")
+        """
+        与智能体进行对话，支持流式输出
+
+        Args:
+            query: 用户输入的文本
+            agent_type: 智能体类型
+
+        Returns:
+            ActionResponse: 智能体的响应
+        """
+        try:
+            # 记录当前使用的智能体
+            self.use_agent_call = agent_type
+
+            # 将用户输入添加到智能体对话历史
+            self.agent_dialogue.put(Message(role="user", content=query))
+            self.logger.bind(tag=TAG).debug(f"Chat with agent calling dialogue: {self.agent_dialogue.get_llm_dialogue()}")
+
+            # 调用智能体处理对话，获取流式响应
+            response_message = []
+            suggest_message = []
+            processed_chars = 0  # 跟踪已处理的字符位置
+            text_index = 0
+
+            # 获取智能体的流式响应
+            agent_responses = asyncio.run_coroutine_threadsafe(
+                self.agent_handler.aexecute_tool(agent_type, self.agent_dialogue), 
+                self.loop
+            ).result()
+            self.logger.bind(tag=TAG).debug(f"Chat with agent calling result: {agent_responses}")
+            for content in agent_responses:
+                response_message.append(content)
+                if self.client_abort:
+                    break
+
+                # 合并当前全部文本并处理未分割部分
+                full_text = "".join(response_message)
+                current_text = full_text[processed_chars:]
+
+                # 查找最后一个有效标点
+                punctuations = ("。", "？", "！", "；", "：")
+                last_punct_pos = -1
+                for punct in punctuations:
+                    pos = current_text.rfind(punct)
+                    if pos > last_punct_pos:
+                        last_punct_pos = pos
+
+                if last_punct_pos != -1:
+                    segment_text_raw = current_text[: last_punct_pos + 1]
+                    segment_text = get_string_no_punctuation_or_emoji(segment_text_raw)
+                    if segment_text:
+                        text_index += 1
+                        self.recode_first_last_text(segment_text, text_index)
+                        future = self.executor.submit(
+                            self.speak_and_play, segment_text, text_index
+                        )
+                        self.tts_queue.put(future)
+                        processed_chars += len(segment_text_raw)
+
+            full_text = "".join(response_message)
+            remaining_text = full_text[processed_chars:]
+            if remaining_text:
+                segment_text = get_string_no_punctuation_or_emoji(remaining_text)
+                if segment_text:
+                    text_index += 1
+                    self.recode_first_last_text(segment_text, text_index)
+                    future = self.executor.submit(
+                        self.speak_and_play, segment_text, text_index
+                    )
+                    self.tts_queue.put(future)
+
+            if len(response_message) > 0:
+                content = "".join(response_message)
+                message = Message(role="assistant", content=content)
+                self.agent_dialogue.put(
+                    message
+                )
+                if len(self.agent_dialogue.dialogue) != 3:
+                    processed_chars = 0  # 跟踪已处理的字符位置
+                    text_index = 0
+
+                    agent_suggest = asyncio.run_coroutine_threadsafe(
+                        self.agent_handler.atool_suggest(agent_type, self.agent_dialogue), 
+                        self.loop
+                    ).result()
+                    self.logger.bind(tag=TAG).debug(f"Chat with agent calling suggest: {agent_responses}")
+                    for content in agent_suggest:
+                        suggest_message.append(content)
+                        if self.client_abort:
+                            break
+
+                        # 合并当前全部文本并处理未分割部分
+                        full_text = "".join(suggest_message)
+                        current_text = full_text[processed_chars:]
+
+                        # 查找最后一个有效标点
+                        punctuations = ("。", "？", "！", "；", "：")
+                        last_punct_pos = -1
+                        for punct in punctuations:
+                            pos = current_text.rfind(punct)
+                            if pos > last_punct_pos:
+                                last_punct_pos = pos
+
+                        if last_punct_pos != -1:
+                            segment_text_raw = current_text[: last_punct_pos + 1]
+                            segment_text = get_string_no_punctuation_or_emoji(segment_text_raw)
+                            if segment_text:
+                                text_index += 1
+                                self.recode_first_last_text(segment_text, text_index)
+                                future = self.executor.submit(
+                                    self.speak_and_play, segment_text, text_index
+                                )
+                                self.tts_queue.put(future)
+                                processed_chars += len(segment_text_raw)
+
+                    full_text = "".join(suggest_message)
+                    remaining_text = full_text[processed_chars:]
+                    if remaining_text:
+                        segment_text = get_string_no_punctuation_or_emoji(remaining_text)
+                        if segment_text:
+                            text_index += 1
+                            self.recode_first_last_text(segment_text, text_index)
+                            future = self.executor.submit(
+                                self.speak_and_play, segment_text, text_index
+                            )
+                            self.tts_queue.put(future)
+                    if len(suggest_message) > 0:
+                        content = content + "".join(suggest_message)
+                        message = Message(role="assistant", content=content)
+                        self.agent_dialogue.update_last_message(
+                            message
+                        )
+
+
+            return ActionResponse(
+                action=Action.NONE, 
+                result="",
+                response=""
+            )
+
+        except Exception as e:
+            self.logger.bind(tag=TAG).error(f"智能体调用错误: {e}")
+            error_msg = f"智能体 {agent_type} 处理失败"
+            return ActionResponse(
+                action=Action.ERROR,
+                result=error_msg,
+                response=""
+            )
 
     def _handle_mcp_tool_call(self, function_call_data):
         function_arguments = function_call_data["arguments"]
