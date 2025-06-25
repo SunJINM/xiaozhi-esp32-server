@@ -12,7 +12,7 @@ spring:
     druid:
       #MySQL
       driver-class-name: com.mysql.cj.jdbc.Driver
-      url: jdbc:mysql://1Panel-mysql-bb8s:3306/xiaozhi_esp32_server?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true
+      url: jdbc:mysql://127.0.0.1:3306/xiaozhi_esp32_server?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true
       username: sunjianjun
       password: yTPArsB2wdKpsYZX
       initial-size: 10
@@ -38,7 +38,7 @@ spring:
             multi-statement-allow: true
   data:
     redis:
-      host: 1Panel-redis-jfXd        # Redis服务器地址
+      host: 127.0.0.1       # Redis服务器地址
       port: 6379              # Redis服务器连接端口
       password: sjj123456     # Redis服务器连接密码（默认为空）
       database: 0            # Redis数据库索引（默认为0）
