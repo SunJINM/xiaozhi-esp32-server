@@ -65,6 +65,20 @@ class Dialogue:
         if memory_str is None or len(memory_str) == 0:
             return self.get_llm_dialogue()
 
+        # 获取用户阅读背景
+        bg_knowledge = f"\n<用户信息>\n\n用户姓名：{user.user_name}\n"
+        if user is not None:
+            try:
+                book_info = user.get_user_read_info()
+                if book_info:
+                    bg_knowledge += book_info.format_read_info
+                else:
+                    bg_knowledge += "<\用户信息>\n"
+            except Exception:
+                pass
+        print(bg_knowledge)
+        if len(memory_str) and len(bg_knowledge) == 0:
+            return self.get_llm_dialogue()
         # 构建带记忆的对话
         dialogue = []
 
@@ -85,4 +99,12 @@ class Dialogue:
             if m.role != "system":  # 跳过原始的系统消息
                 self.getMessages(m, dialogue)
 
+        if len(dialogue) > 0 and dialogue[-1].get("role") == "user" and bg_knowledge:
+            user_query = dialogue[-1]["content"]
+            enhanced_user_query = {"role": "user", "content": f"{bg_knowledge}\n\n用户问题：{user_query}"}
+            dialogue[-1] = enhanced_user_query
+
         return dialogue
+
+    def clear(self):
+        self.dialogue.clear()

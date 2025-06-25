@@ -19,6 +19,7 @@ from core.utils.util import (
 )
 from typing import Dict, Any
 from core.mcp.manager import MCPManager
+from core.agent.agent_manager import AgentManager
 from core.utils.modules_initialize import (
     initialize_modules,
     initialize_tts,
@@ -31,6 +32,7 @@ from core.utils.dialogue import Message, Dialogue
 from core.providers.asr.dto.dto import InterfaceType
 from core.handle.textHandle import handleTextMessage
 from core.handle.functionHandler import FunctionHandler
+from core.user import User
 from plugins_func.loadplugins import auto_import_modules
 from plugins_func.register import Action, ActionResponse
 from core.auth import AuthMiddleware, AuthenticationError
@@ -133,6 +135,16 @@ class ConnectionHandler:
         # iot相关变量
         self.iot_descriptors = {}
         self.func_handler = None
+
+        # agent相关变量
+        self.use_agent_call = None
+        self.agent_handler = None
+        self.agent_dialogue = Dialogue()
+
+
+        # 身份绑定
+        self.need_bind = False
+        self.user = None
 
         self.cmd_exit = self.config["exit_commands"]
         self.max_cmd_length = 0
@@ -341,6 +353,8 @@ class ConnectionHandler:
                 self.tts.open_audio_channels(self), self.loop
             )
 
+            """加载身份"""
+            self._identity_auth()
             """加载记忆"""
             self._initialize_memory()
             """加载意图识别"""
@@ -350,6 +364,13 @@ class ConnectionHandler:
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
 
+    def _identity_auth(self):
+        """身份认证"""
+        self.user = User.get_robot_bind_user(self.device_id)
+        if self.need_bind and self.user is None:
+            self.logger.bind(tag=TAG).error(
+                f"身份认证失败"
+            )
     def _init_report_threads(self):
         """初始化ASR和TTS上报线程"""
         if not self.read_config_from_api or self.need_bind:
@@ -589,10 +610,16 @@ class ConnectionHandler:
         """加载插件"""
         self.func_handler = FunctionHandler(self)
         self.mcp_manager = MCPManager(self)
+        self.agent_handler = AgentManager(self)
 
         """加载MCP工具"""
         asyncio.run_coroutine_threadsafe(
             self.mcp_manager.initialize_servers(), self.loop
+        )
+
+        """加载智能体工具"""
+        asyncio.run_coroutine_threadsafe(
+            self.agent_handler.initialize_servers(), self.loop
         )
 
     def change_system_prompt(self, prompt):
@@ -605,7 +632,10 @@ class ConnectionHandler:
         self.llm_finish_task = False
 
         if not tool_call:
-            self.dialogue.put(Message(role="user", content=query))
+            if self.use_agent_call:
+                self.agent_dialogue.put(Message(role="user", content=query))
+            else:
+                self.dialogue.put(Message(role="user", content=query))
 
         # Define intent functions
         functions = None
@@ -631,7 +661,9 @@ class ConnectionHandler:
             self.sentence_id = str(uuid.uuid4().hex)
 
 
-            if self.intent_type == "function_call" and functions is not None:
+            if self.use_agent_call is not None:
+                llm_responses = self.agent_handler.execute_tool(self.use_agent_call, self.agent_dialogue)
+            elif self.intent_type == "function_call" and functions is not None:
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
@@ -782,6 +814,9 @@ class ConnectionHandler:
                         result = ActionResponse(
                             action=Action.REQLLM, result="MCP工具调用失败", response=""
                         )
+                elif self.use_agent_call is None and self.agent_handler.is_agent_tool(function_name):
+                    self.use_agent_call = function_name
+                    self.chat(query)
                 else:
                     # 处理系统函数
                     result = self.func_handler.handle_llm_function_call(
@@ -791,9 +826,14 @@ class ConnectionHandler:
 
         # 存储对话内容
         if len(response_message) > 0:
-            self.dialogue.put(
-                Message(role="assistant", content="".join(response_message))
-            )
+            if self.use_agent_call:
+                self.agent_dialogue.put(
+                    Message(role="assistant", content="".join(response_message))
+                )
+            else:
+                self.dialogue.put(
+                    Message(role="assistant", content="".join(response_message))
+                )
         if text_index > 0:
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
