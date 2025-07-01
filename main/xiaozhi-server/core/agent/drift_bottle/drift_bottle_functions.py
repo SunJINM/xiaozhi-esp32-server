@@ -148,7 +148,7 @@ def marked_listened(user: User, type: int, target_id: int, *args, **kwargs):
 
 def exit_agent(conn: ConnectionHandler, *args, **kwargs):
     """退出漂流瓶功能"""
-    conn.use_agent_call = None
+    conn.current_agent = None
     conn.agent_dialogue.clear()
     res = "已退出漂流瓶功能"
     conn.dialogue.put(Message(role="user", content=res))

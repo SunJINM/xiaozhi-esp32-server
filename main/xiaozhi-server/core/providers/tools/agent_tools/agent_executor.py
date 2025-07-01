@@ -71,6 +71,8 @@ class AgentToolExecutor(ToolExecutor):
             }
 
             for agent_id, agent_config in agent_models.items():
+                if self.conn.user is None:
+                    continue
                 agent_tool_name = agent_config.get("type")
                 desc = agent_config.get("description")
                 self.agent_tools[agent_tool_name] = {

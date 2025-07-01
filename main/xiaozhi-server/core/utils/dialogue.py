@@ -62,8 +62,6 @@ class Dialogue:
     def get_llm_dialogue_with_memory(
         self, memory_str: str = None, user: Any = None
     ) -> List[Dict[str, str]]:
-        if memory_str is None or len(memory_str) == 0:
-            return self.get_llm_dialogue()
         bg_knowledge = f"\n<用户信息>\n\n用户姓名：{user.user_name}\n"
         if user is not None:
             try:
@@ -76,8 +74,6 @@ class Dialogue:
                 pass
         print(bg_knowledge)
         if len(memory_str) and len(bg_knowledge) == 0:
-            return self.get_llm_dialogue()
-        if memory_str is None or len(memory_str) == 0:
             return self.get_llm_dialogue()
 
         # 构建带记忆的对话
