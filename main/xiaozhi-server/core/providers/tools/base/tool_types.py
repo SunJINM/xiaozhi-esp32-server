@@ -15,6 +15,7 @@ class ToolType(Enum):
     DEVICE_IOT = "device_iot"  # 设备端IoT
     DEVICE_MCP = "device_mcp"  # 设备端MCP
     MCP_ENDPOINT = "mcp_endpoint"  # MCP接入点
+    AGENT_TOOLS = "agent_tools"  # Agent工具
 
 
 @dataclass
