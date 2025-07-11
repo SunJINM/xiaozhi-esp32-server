@@ -62,89 +62,35 @@ class AgentManager:
     async def initialize_servers(self) -> None:
         """初始化所有智能体"""
         try:
-            # 从API获取智能体配置
-            SCRIPT_MURDER_DESC = {
-                "type": "function",
-                "function": {
-                    "name": "script_murder",
-                    "description": (
-                        "当用户想要玩游戏或玩剧本杀时使用"
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            }
-            DRIFT_BOTTLE_DESC = {
-                "type": "function",
-                "function": {
-                    "name": "drift_bottle",
-                    "description": (
-                        "当用户想要玩漂流瓶时使用，或用户情绪低落时，可以询问是否扔一个漂流瓶"
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            }
-
-            agent_models = {
-                "script_murder": {
-                    "type": "script_murder",
-                    "description": SCRIPT_MURDER_DESC
-                },
-                "drift_bottle": {
-                    "type": "drift_bottle",
-                    "description": DRIFT_BOTTLE_DESC
-                }
-            }
             
-            if not agent_models or self.conn.user is None:
-                self.logger.bind(tag=__name__).warning("未获取到智能体配置或未绑定用户")
+            if self.conn.user is None:
+                self.logger.bind(tag=__name__).warning("未绑定用户")
                 return
                 
             # 初始化智能体
-            for agent_id, agent_config in agent_models.items():
+            for agent_name, agent_class in self.agents.items():
                 try:
-                    # 获取智能体类型
-                    agent_type = agent_config.get("type", "default")
-                    
-                    # 尝试动态加载智能体类
-                    agent_class = self._get_agent_class(agent_type)
-                    
-                    # 创建智能体实例
                     agent = agent_class(
                         session_id=self.conn.session_id,
                         llm=self.conn.llm,
                         user=self.conn.user,
                         conn=self.conn,
                     )
-                    
-                    self.agents[agent_id] = agent
-                    self.logger.bind(tag=__name__).info(f"初始化智能体成功: {agent_id}, 类型: {agent_type}")
-                    
-                    # 注册智能体工具 
 
-                    agent_tool_name = agent_config.get("type")
-                    desc = agent_config.get("description")
+                    self.agents[agent_name] = agent
+                    self.logger.bind(tag=__name__).info(f"初始化智能体成功: {agent_name}")
+
+                    # 注册智能体工具 
+                    desc = {
+                        "name": agent_name,
+                        "desc": agent.get_desc
+                    }
                     self.tools.append(desc)
-                    # register_function(agent_tool_name, desc, ToolType.AGENT)(
-                    #     self.execute_tool
-                    # )
-                    # self.conn.func_handler.function_registry.register_function(
-                    #     agent_tool_name
-                    # )
 
                 except Exception as e:
                     self.logger.bind(tag=__name__).error(
-                        f"初始化智能体失败 {agent_id}: {e}"
+                        f"初始化智能体失败 {agent_name}: {e}"
                     )
-                    
-            # self.conn.func_handler.upload_functions_desc()
             
         except Exception as e:
             self.logger.bind(tag=__name__).error(f"获取智能体配置失败: {e}")
@@ -202,10 +148,9 @@ class AgentManager:
         """
         self.logger.bind(tag=__name__).debug(f"检查是否是智能体工具: {tool_name}")
         for tool in self.tools:
-            self.logger.bind(tag=__name__).debug(f"工具: {tool}")
             if (
-                tool.get("function") != None
-                and tool["function"].get("name") == tool_name
+                tool.get("name") != None
+                and tool.get("name") == tool_name
             ):
                 return True
         return False

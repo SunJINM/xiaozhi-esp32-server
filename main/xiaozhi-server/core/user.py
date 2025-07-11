@@ -57,8 +57,8 @@ class User(BaseModel):
         Returns:
             UserBookRead: 包含当前在读和历史阅读的书籍信息
         """
-        # if self.read_info is not None:
-        #     return read_info
+        if self.read_info is not None:
+            return self.read_info
         try:
             with httpx.Client() as client:
                 response = client.post(

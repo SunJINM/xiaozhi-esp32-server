@@ -45,6 +45,12 @@ class Dialogue:
         else:
             dialogue.append({"role": m.role, "content": m.content})
 
+    def get_agent_llm_dialogue(self) -> List[Dict[str, str]]:
+        dialogue = []
+        for m in self.dialogue:
+            self.getMessages(m, dialogue)
+        return dialogue
+
     def get_llm_dialogue(self) -> List[Dict[str, str]]:
         # 直接调用get_llm_dialogue_with_memory，传入None作为memory_str
         # 这样确保说话人功能在所有调用路径下都生效
@@ -62,8 +68,9 @@ class Dialogue:
     def get_llm_dialogue_with_memory(
         self, memory_str: str = None, voiceprint_config: dict = None, user: Any = None
     ) -> List[Dict[str, str]]:
-        bg_knowledge = f"\n<用户信息>\n\n用户姓名：{user.user_name}\n"
+        bg_knowledge = None
         if user is not None:
+            bg_knowledge = f"\n<用户信息>\n\n用户姓名：{user.user_name}\n"
             try:
                 book_info = user.get_user_read_info()
                 if book_info:
@@ -72,9 +79,7 @@ class Dialogue:
                     bg_knowledge += "<\用户信息>\n"
             except Exception:
                 pass
-        print(bg_knowledge)
-        if len(memory_str) and len(bg_knowledge) == 0:
-            return self.get_llm_dialogue()
+        dialogue = []
 
         # 添加系统提示和记忆
         system_message = next(

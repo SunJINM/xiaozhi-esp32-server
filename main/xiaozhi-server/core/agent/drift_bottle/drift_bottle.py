@@ -32,6 +32,23 @@ class DriftBottle(Agent):
     def prompt(self) -> str:
         """系统提示词"""
         return DRIFT_BOTTLE_SYSTEM_PROMPT
+
+    @property
+    def get_desc(self) -> str:
+        return {
+                "type": "function",
+                "function": {
+                    "name": "drift_bottle",
+                    "description": (
+                        "当用户想要玩漂流瓶时使用，或用户情绪低落时，可以询问是否扔一个漂流瓶"
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            }
     
     def _get_drift_bottle_functions(self):
         """定义漂流瓶相关的工具函数"""
@@ -155,7 +172,7 @@ class DriftBottle(Agent):
             # 使用带function calling的LLM响应
             llm_response = self.llm.response_with_functions(
                 self.session_id, 
-                dialogue.get_llm_dialogue(), 
+                dialogue.get_agent_llm_dialogue(), 
                 functions
             )
             tool_call_flag = False

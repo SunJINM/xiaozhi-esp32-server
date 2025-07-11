@@ -30,53 +30,14 @@ class AgentToolExecutor(ToolExecutor):
     def _register_tools(self):
         """注册漂流瓶工具"""
         try:
-            SCRIPT_MURDER_DESC = {
-                "type": "function",
-                "function": {
-                    "name": "script_murder",
-                    "description": (
-                        "当用户想要玩游戏或玩剧本杀时使用"
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            }
-            DRIFT_BOTTLE_DESC = {
-                "type": "function",
-                "function": {
-                    "name": "drift_bottle",
-                    "description": (
-                        "当用户想要玩漂流瓶时使用，或用户情绪低落时，可以询问是否扔一个漂流瓶"
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            }
 
-            agent_models = {
-                "script_murder": {
-                    "type": "script_murder",
-                    "description": SCRIPT_MURDER_DESC
-                },
-                "drift_bottle": {
-                    "type": "drift_bottle",
-                    "description": DRIFT_BOTTLE_DESC
-                }
-            }
-
-            for agent_id, agent_config in agent_models.items():
-                if self.conn.user is None:
-                    continue
-                agent_tool_name = agent_config.get("type")
-                desc = agent_config.get("description")
-                self.agent_tools[agent_tool_name] = {
-                    "function": agent_tool_name,
+            tools = self.conn.agent_handler.get_all_tools()
+            print(f"gongj: {tools}")
+            for tool in tools:
+                name = tool.get("name")
+                desc = tool.get("desc")
+                self.agent_tools[name] = {
+                    "function": name,
                     "description": desc
                 }
             

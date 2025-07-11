@@ -34,6 +34,12 @@ class Agent(ABC, BaseModel):
 
     @property
     @abstractmethod
+    def get_desc(self) -> str:
+        """智能体描述"""
+        pass
+
+    @property
+    @abstractmethod
     def prompt(self) -> str:
         """系统提示词"""
         pass
@@ -48,7 +54,7 @@ class Agent(ABC, BaseModel):
 
     def generate(self, dialogue: Dialogue):
         self.conn.logger.bind(tag=TAG).debug(
-            f"智能体收到消息：{dialogue.get_llm_dialogue()}"
+            f"智能体收到消息：{dialogue.get_agent_llm_dialogue()}"
         )
         return self._generate(dialogue)
     
@@ -81,7 +87,7 @@ class Agent(ABC, BaseModel):
         if result.action == Action.RESPONSE:
             text = result.response
             if text is not None and len(text) > 0:
-                yield text, None
+                yield text
                 self.conn.agent_dialogue.put(Message(role="assistant", content=text))
         elif result.action == Action.REQLLM: 
             text = result.result
@@ -113,7 +119,7 @@ class Agent(ABC, BaseModel):
         elif result.action == Action.NOTFOUND or result.action == Action.ERROR:
             text = result.result
             if text is not None and len(text) > 0:
-                yield text, None
+                yield text
                 self.conn.agent_dialogue.put(Message(role="assistant", content=text))
         else:
             pass

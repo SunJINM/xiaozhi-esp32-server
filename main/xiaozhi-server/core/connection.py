@@ -570,7 +570,7 @@ class ConnectionHandler:
             return
         """初始化记忆模块"""
         self.memory.init_memory(
-            role_id=self.device_id,
+            role_id=self.user.user_id,
             llm=self.llm,
             summary_memory=self.config.get("summaryMemory", None),
             save_to_file=not self.read_config_from_api,
@@ -649,17 +649,18 @@ class ConnectionHandler:
                 self.intent.set_llm(self.llm)
                 self.logger.bind(tag=TAG).info("使用主LLM作为意图识别模型")
 
+        self.agent_handler = AgentManager(self)
+        """加载智能体工具"""
+        asyncio.run_coroutine_threadsafe(
+            self.agent_handler.initialize_servers(), self.loop
+        ).result()
+
         """加载统一工具处理器"""
         self.func_handler = UnifiedToolHandler(self)
-        self.agent_handler = AgentManager(self)
 
         # 异步初始化工具处理器
         if hasattr(self, "loop") and self.loop:
             asyncio.run_coroutine_threadsafe(self.func_handler._initialize(), self.loop)
-        """加载智能体工具"""
-        asyncio.run_coroutine_threadsafe(
-            self.agent_handler.initialize_servers(), self.loop
-        )
 
     def change_system_prompt(self, prompt):
         self.prompt = prompt
@@ -669,13 +670,13 @@ class ConnectionHandler:
     def chat(self, query, tool_call=False, depth=0):
         self.logger.bind(tag=TAG).info(f"大模型收到用户消息: {query}")
         self.llm_finish_task = False
+        self.client_abort = False
 
         if not tool_call:
             if self.current_agent:
                 self.agent_dialogue.put(Message(role="user", content=query))
             else:
                 self.dialogue.put(Message(role="user", content=query))
-
         # 为最顶层时新建会话ID和发送FIRST请求
         if depth == 0:
             self.sentence_id = str(uuid.uuid4().hex)
@@ -689,22 +690,20 @@ class ConnectionHandler:
 
         # Define intent functions
         functions = None
-        if self.intent_type == "function_call" and hasattr(self, "func_handler"):
-            functions = self.func_handler.get_functions()
-
-        self.logger.bind(tag=TAG).info(f"可用工具: {functions}")
+        if self.current_agent is None:
+            if self.intent_type == "function_call" and hasattr(self, "func_handler"):
+                functions = self.func_handler.get_functions()
+            self.logger.bind(tag=TAG).debug(f"可用工具: {functions}")
         response_message = []
 
         try:
             # 使用带记忆的对话
             memory_str = None
-            if self.memory is not None:
+            if self.current_agent is None and self.memory is not None:
                 future = asyncio.run_coroutine_threadsafe(
                     self.memory.query_memory(query), self.loop
                 )
                 memory_str = future.result()
-
-            self.sentence_id = str(uuid.uuid4().hex)
 
             if self.current_agent is not None:
                 llm_responses = self.agent_handler.execute_tool(self.current_agent, self.agent_dialogue)
@@ -712,7 +711,7 @@ class ConnectionHandler:
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
-                    self.dialogue.get_llm_dialogue_with_memory(memory_str, self.user),
+                    self.dialogue.get_llm_dialogue_with_memory(memory_str, self.config.get("voiceprint", {}), self.user),
                     functions=functions,
                 )
             else:
@@ -732,7 +731,6 @@ class ConnectionHandler:
         function_id = None
         function_arguments = ""
         content_arguments = ""
-        self.client_abort = False
         for response in llm_responses:
             if self.client_abort:
                 break
@@ -809,7 +807,7 @@ class ConnectionHandler:
                 }
                 if self.current_agent is None and self.agent_handler.is_agent_tool(function_name):
                     self.current_agent = function_name
-                    self.chat(query)
+                    self.chat(query, depth=depth + 1)
                 else:
                     # 使用统一工具处理器处理所有工具调用
                     result = asyncio.run_coroutine_threadsafe(
