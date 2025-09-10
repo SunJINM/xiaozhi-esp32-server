@@ -63,11 +63,11 @@ async def startToChat(conn, text):
         await handleAbortMessage(conn)
 
     # 首先进行意图分析，使用实际文本内容
-    intent_handled = await handle_user_intent(conn, actual_text)
+    # intent_handled = await handle_user_intent(conn, actual_text)
 
-    if intent_handled:
-        # 如果意图已被处理，不再进行聊天
-        return
+    # if intent_handled:
+    #     # 如果意图已被处理，不再进行聊天
+    #     return
 
     # 意图未被处理，继续常规聊天流程，使用实际文本内容
     await send_stt_message(conn, actual_text)

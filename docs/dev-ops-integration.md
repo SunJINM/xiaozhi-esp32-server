@@ -4,7 +4,7 @@
 
 本项目的测试平台`https://2662r3426b.vicp.fun`，从开放以来就使用了该方法，效果良好。
 
-教程可参考B站博主`毕乐labs`发布的视频教程：[《开源小智服务器xiaozhi-server自动更新以及最新版本MCP接入点配置保姆教程》](https://www.bilibili.com/video/BV15H37zHE7Q)
+教程可参考B站博主`毕乐labs`发布的视频教程：[《开源小阅服务器xiaozhi-server自动更新以及最新版本MCP接入点配置保姆教程》](https://www.bilibili.com/video/BV15H37zHE7Q)
 
 # 开始条件
 - 你的电脑/服务器是linux操作系统

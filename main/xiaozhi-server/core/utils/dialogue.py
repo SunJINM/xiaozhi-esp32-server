@@ -1,6 +1,6 @@
 import uuid
 import re
-from typing import List, Dict
+from typing import Any, List, Dict, Optional
 from datetime import datetime
 
 
@@ -45,6 +45,42 @@ class Dialogue:
         else:
             dialogue.append({"role": m.role, "content": m.content})
 
+    def get_agent_llm_dialogue(self, knowledge: Optional[str] = None, memory: Optional[Any] = None) -> List[Dict[str, str]]:
+        dialogue = []
+        system_message = next(
+            (msg for msg in self.dialogue if msg.role == "system"), None
+        )
+
+        if system_message:
+            # 基础系统提示
+            enhanced_system_prompt = system_message.content
+
+            # 使用正则表达式匹配 <memory> 标签，不管中间有什么内容
+            if knowledge is not None:
+                # 替换existing memory标签
+                enhanced_system_prompt = re.sub(
+                    r"<knowledge>.*?</knowledge>",
+                    f"<knowledge>\n{knowledge}\n</knowledge>",
+                    enhanced_system_prompt,
+                    flags=re.DOTALL,
+                )
+            if memory is not None:
+                # 替换existing memory标签
+                enhanced_system_prompt = re.sub(
+                    r"<memory>.*?</memory>",
+                    f"<memory>\n{memory}\n</memory>",
+                    enhanced_system_prompt,
+                    flags=re.DOTALL,
+                )
+            dialogue.append({"role": "system", "content": enhanced_system_prompt})
+
+        # 添加用户和助手的对话
+        for m in self.dialogue:
+            if m.role != "system":  # 跳过原始的系统消息
+                self.getMessages(m, dialogue)
+        print(f"{dialogue}")
+        return dialogue
+
     def get_llm_dialogue(self) -> List[Dict[str, str]]:
         # 直接调用get_llm_dialogue_with_memory，传入None作为memory_str
         # 这样确保说话人功能在所有调用路径下都生效
@@ -60,8 +96,23 @@ class Dialogue:
             self.put(Message(role="system", content=new_content))
 
     def get_llm_dialogue_with_memory(
-        self, memory_str: str = None, voiceprint_config: dict = None
+        self, memory_str: str = None, voiceprint_config: dict = None, user: Any = None, next_action: Any = None
     ) -> List[Dict[str, str]]:
+        bg_knowledge = None
+        if user is not None:
+            bg_knowledge = f"\n<用户信息>\n\n用户姓名：{user.user_name}\n"
+            # try:
+            #     book_info = user.get_user_read_info()
+            #     if book_info:
+            #         bg_knowledge += book_info.format_read_info
+            # except Exception:
+            #     pass
+            bg_knowledge += "</用户信息>\n"
+        if next_action is not None:
+            if bg_knowledge is None:
+                bg_knowledge = ""
+            bg_knowledge += next_action
+
         # 构建对话
         dialogue = []
 
@@ -115,4 +166,12 @@ class Dialogue:
             if m.role != "system":  # 跳过原始的系统消息
                 self.getMessages(m, dialogue)
 
+        if len(dialogue) > 0 and dialogue[-1].get("role") == "user" and bg_knowledge:
+            user_query = dialogue[-1]["content"]
+            enhanced_user_query = {"role": "user", "content": f"{bg_knowledge}\n\n用户问题：{user_query}"}
+            dialogue[-1] = enhanced_user_query
+
         return dialogue
+    
+    def clear(self):
+        self.dialogue.clear()

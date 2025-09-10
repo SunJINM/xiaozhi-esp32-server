@@ -9,7 +9,7 @@ public class AESUtilsTest {
     @Test
     public void testEncryptAndDecrypt() {
         String key = "xiaozhi1234567890";
-        String plainText = "Hello, 小智!";
+        String plainText = "Hello, 小阅!";
 
         System.out.println("原始文本: " + plainText);
         System.out.println("密钥: " + key);
@@ -52,7 +52,7 @@ public class AESUtilsTest {
         String[] testTexts = {
                 "Hello World",
                 "你好世界",
-                "Hello, 小智!",
+                "Hello, 小阅!",
                 "特殊字符: !@#$%^&*()",
                 "数字123和中文混合",
                 "Emoji: 😀🎉🚀",
@@ -71,7 +71,7 @@ public class AESUtilsTest {
     public void testCrossLanguageCompatibility() {
         // 这些是Python版本生成的加密结果，用于测试跨语言兼容性
         String key = "xiaozhi1234567890";
-        String plainText = "Hello, 小智!";
+        String plainText = "Hello, 小阅!";
 
         // Python版本生成的加密结果（需要运行Python测试后获取）
         // String pythonEncrypted = "从Python测试中获取的加密结果";

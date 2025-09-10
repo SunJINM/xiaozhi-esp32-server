@@ -4,7 +4,7 @@ import { tabBar } from './src/layouts/fg-tabbar/tabbarList'
 export default defineUniPages({
   globalStyle: {
     navigationStyle: 'default',
-    navigationBarTitleText: '小智',
+    navigationBarTitleText: '小阅',
     navigationBarBackgroundColor: '#f8f8f8',
     navigationBarTextStyle: 'black',
     backgroundColor: '#FFFFFF',

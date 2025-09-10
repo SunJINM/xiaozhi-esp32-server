@@ -24,8 +24,11 @@ def load_config():
     if cached_config is not None:
         return cached_config
 
-    default_config_path = get_project_dir() + "config.yaml"
-    custom_config_path = get_project_dir() + "data/.config.yaml"
+    # 获取环境变量
+    os_env = os.environ.get('PYTHON_PROFILES_ACTIVATE', "dev")
+
+    default_config_path = get_project_dir() + f"config-{os_env}.yaml"
+    custom_config_path = get_project_dir() + f"data/.config-{os_env}.yaml"
 
     # 加载默认配置
     default_config = read_config(default_config_path)

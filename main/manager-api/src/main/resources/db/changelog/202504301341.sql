@@ -68,7 +68,7 @@ INSERT INTO `sys_dict_data` (`id`, `dict_type_id`, `dict_label`, `dict_value`, `
 (101037, 101, '土豆子', 'tudouzi', '土豆子', 37, 1, NOW(), 1, NOW()),
 (101038, 101, 'LILYGO T-Circle-S3', 'lilygo-t-circle-s3', 'LILYGO T-Circle-S3', 38, 1, NOW(), 1, NOW()),
 (101039, 101, 'LILYGO T-CameraPlus-S3', 'lilygo-t-cameraplus-s3', 'LILYGO T-CameraPlus-S3', 39, 1, NOW(), 1, NOW()),
-(101040, 101, 'Movecall Moji 小智AI衍生版', 'movecall-moji-esp32s3', 'Movecall Moji 小智AI衍生版', 40, 1, NOW(), 1, NOW()),
+(101040, 101, 'Movecall Moji 小阅AI衍生版', 'movecall-moji-esp32s3', 'Movecall Moji 小阅AI衍生版', 40, 1, NOW(), 1, NOW()),
 (101041, 101, 'Movecall CuiCan 璀璨·AI吊坠', 'movecall-cuican-esp32s3', 'Movecall CuiCan 璀璨·AI吊坠', 41, 1, NOW(), 1, NOW()),
 (101042, 101, '正点原子DNESP32S3开发板', 'atk-dnesp32s3', '正点原子DNESP32S3开发板', 42, 1, NOW(), 1, NOW()),
 (101043, 101, '正点原子DNESP32S3-BOX', 'atk-dnesp32s3-box', '正点原子DNESP32S3-BOX', 43, 1, NOW(), 1, NOW()),

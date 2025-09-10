@@ -1,6 +1,6 @@
 # 常见问题 ❓
 
-### 1、为什么我说的话，小智识别出来很多韩文、日文、英文？🇰🇷
+### 1、为什么我说的话，小阅识别出来很多韩文、日文、英文？🇰🇷
 
 建议：检查一下`models/SenseVoiceSmall`是否已经有`model.pt`
 文件，如果没有就要下载，查看这里[下载语音识别模型文件](Deployment.md#模型文件)
@@ -31,7 +31,7 @@ conda install conda-forge::ffmpeg
 
 2、使用nginx配置ssl证书。参考教程 https://icnt94i5ctj4.feishu.cn/docx/GnYOdMNJOoRCljx1ctecsj9cnRe
 
-### 5、如何提高小智对话响应速度？ ⚡
+### 5、如何提高小阅对话响应速度？ ⚡
 
 本项目默认配置为低成本方案，建议初学者先使用默认免费模型，解决"跑得动"的问题，再优化"跑得快"。  
 如需提升响应速度，可尝试更换各组件。自`0.5.2`版本起，项目支持流式配置，相比早期版本，响应速度提升约`2.5秒`，显著改善用户体验。
@@ -45,9 +45,9 @@ conda install conda-forge::ffmpeg
 | Intent(意图识别) | function_call(函数调用) | function_call(函数调用) |
 | Memory(记忆功能) | mem_local_short(本地短期记忆） | mem_local_short（本地短期记忆） |
 
-如果您关心各组件的耗时，请查阅[小智各组件性能测试报告](https://github.com/xinnan-tech/xiaozhi-performance-research)，可按报告中的测试方法在您的环境中实际测试。
+如果您关心各组件的耗时，请查阅[小阅各组件性能测试报告](https://github.com/xinnan-tech/xiaozhi-performance-research)，可按报告中的测试方法在您的环境中实际测试。
 
-### 6、我说话很慢，停顿时小智老是抢话 🗣️
+### 6、我说话很慢，停顿时小阅老是抢话 🗣️
 
 建议：在配置文件中找到如下部分，将 `min_silence_duration_ms` 的值调大（例如改为 `1000`）：
 
@@ -66,7 +66,7 @@ VAD:
 4、[如何与Nginx集成](https://github.com/xinnan-tech/xiaozhi-esp32-server/issues/791)<br/>
 
 ### 8、编译固件相关教程
-1、[如何自己编译小智固件](./firmware-build.md)<br/>
+1、[如何自己编译小阅固件](./firmware-build.md)<br/>
 2、[如何基于虾哥编译好的固件修改OTA地址](./firmware-setting.md)<br/>
 
 ### 8、拓展相关教程

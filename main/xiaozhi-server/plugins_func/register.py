@@ -16,6 +16,7 @@ class ToolType(Enum):
     )
     IOT_CTL = (5, "IOT设备控制，需要传递conn参数")
     MCP_CLIENT = (6, "MCP客户端")
+    AGENT = (7, "智能体")
 
     def __init__(self, code, message):
         self.code = code
@@ -28,6 +29,7 @@ class Action(Enum):
     NONE = (1, "啥也不干")
     RESPONSE = (2, "直接回复")
     REQLLM = (3, "调用函数后再请求llm生成回复")
+    REQ_USER_LLM = (4, "调用函数后，需要再进行调用User相关的方法，之后再进行LLM生成回复")
 
     def __init__(self, code, message):
         self.code = code

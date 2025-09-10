@@ -46,7 +46,7 @@ cat << "EOF"
      \/  \__,_||_| |_||_||_||_| \__,_|   |_| \_| \__,_||_| |_||_| \__,_| \__,_|                                                                                                                                                                                                                               
 EOF
 echo -e "\e[0m"  # 重置颜色
-echo -e "\e[1;36m  小智服务端全量部署一键安装脚本 Ver 0.2 2025年8月20日更新 \e[0m\n"
+echo -e "\e[1;36m  小阅服务端全量部署一键安装脚本 Ver 0.2 2025年8月20日更新 \e[0m\n"
 sleep 1
 
 
@@ -63,7 +63,7 @@ check_whiptail() {
 check_whiptail
 
 # 创建确认对话框
-whiptail --title "安装确认" --yesno "即将安装小智服务端，是否继续？" \
+whiptail --title "安装确认" --yesno "即将安装小阅服务端，是否继续？" \
   --yes-button "继续" --no-button "退出" 10 50
 
 # 根据用户选择执行操作
@@ -133,7 +133,7 @@ check_installed() {
 
 # 更新相关
 if check_installed; then
-    if whiptail --title "已安装检测" --yesno "检测到小智服务端已安装，是否进行升级？" 10 60; then
+    if whiptail --title "已安装检测" --yesno "检测到小阅服务端已安装，是否进行升级？" 10 60; then
         # 用户选择升级，执行清理操作
         echo "开始升级操作..."
         

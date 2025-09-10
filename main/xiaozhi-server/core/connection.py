@@ -23,8 +23,10 @@ from core.utils.modules_initialize import (
     initialize_tts,
     initialize_asr,
 )
+from core.user import User
 from core.handle.reportHandle import report
 from core.providers.tts.default import DefaultTTS
+from core.agent.agent_manager import AgentManager
 from concurrent.futures import ThreadPoolExecutor
 from core.utils.dialogue import Message, Dialogue
 from core.providers.asr.dto.dto import InterfaceType
@@ -40,6 +42,8 @@ from config.manage_api_client import DeviceNotFoundException, DeviceBindExceptio
 from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils import textUtils
+from core.providers.tts.voice_manager import VoiceManager
+from core.utils.probing import ProactiveManager
 
 TAG = __name__
 
@@ -156,6 +160,23 @@ class ConnectionHandler:
 
         # 初始化提示词管理器
         self.prompt_manager = PromptManager(config, self.logger)
+
+        # 用户最后一条输入数据，用于表情分析
+        self.last_user_input = ""
+
+        # agent相关变量
+        self.current_agent = None
+        self.agent_handler = None
+        self.agent_dialogue = Dialogue()
+
+        # 音色管理器
+        self.voice_manager = VoiceManager()
+
+        # 用户信息
+        self.user = None
+
+        self.proactive_manager = ProactiveManager(logger = self.logger)
+        self.start_time = time.time()
 
     async def handle_connection(self, ws):
         try:
@@ -368,6 +389,8 @@ class ConnectionHandler:
                 self.tts.open_audio_channels(self), self.loop
             )
 
+            """加载身份"""
+            self._identity_auth()
             """加载记忆"""
             self._initialize_memory()
             """加载意图识别"""
@@ -376,9 +399,19 @@ class ConnectionHandler:
             self._init_report_threads()
             """更新系统提示词"""
             self._init_prompt_enhancement()
+            """初始化是否需要主动询问用户信息"""
+            self.proactive_manager.init_proactive(self.llm, self.memory, self.loop)
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
+
+    def _identity_auth(self):
+        """身份认证"""
+        self.user = User.get_robot_bind_user(self.device_id)
+        if self.user is None:
+            self.logger.bind(tag=TAG).error(
+                f"身份认证失败"
+            )
 
     def _init_prompt_enhancement(self):
         # 更新上下文信息
@@ -648,6 +681,12 @@ class ConnectionHandler:
                 self.intent.set_llm(self.llm)
                 self.logger.bind(tag=TAG).info("使用主LLM作为意图识别模型")
 
+        self.agent_handler = AgentManager(self)
+        """加载智能体工具"""
+        asyncio.run_coroutine_threadsafe(
+            self.agent_handler.initialize_servers(), self.loop
+        ).result()
+
         """加载统一工具处理器"""
         self.func_handler = UnifiedToolHandler(self)
 
@@ -660,14 +699,25 @@ class ConnectionHandler:
         # 更新系统prompt至上下文
         self.dialogue.update_system_message(self.prompt)
 
-    def chat(self, query, depth=0):
+    def _get_current_voice(self):
+        """获取当前应该使用的音色"""
+        voice = self.voice_manager.get_voice_for_agent(self.current_agent)
+        return voice
+
+    def chat(self, query, depth=0, agent_call=False):
         self.logger.bind(tag=TAG).info(f"大模型收到用户消息: {query}")
         self.llm_finish_task = False
+        current_voice = self._get_current_voice()
 
         # 为最顶层时新建会话ID和发送FIRST请求
         if depth == 0:
+            self.last_user_input = query
+            self.start_time = time.time()
             self.sentence_id = str(uuid.uuid4().hex)
-            self.dialogue.put(Message(role="user", content=query))
+            if self.current_agent:
+                self.agent_dialogue.put(Message(role="user", content=query))
+            else:
+                self.dialogue.put(Message(role="user", content=query))
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=self.sentence_id,
@@ -678,8 +728,9 @@ class ConnectionHandler:
 
         # Define intent functions
         functions = None
-        if self.intent_type == "function_call" and hasattr(self, "func_handler"):
-            functions = self.func_handler.get_functions()
+        if self.current_agent is None:
+            if self.intent_type == "function_call" and hasattr(self, "func_handler"):
+                functions = self.func_handler.get_functions()
         response_message = []
 
         try:
@@ -691,16 +742,21 @@ class ConnectionHandler:
                 )
                 memory_str = future.result()
 
-            if self.intent_type == "function_call" and functions is not None:
+            if self.current_agent is not None:
+                llm_responses = self.agent_handler.execute_tool(self.current_agent, self.agent_dialogue, memory=memory_str)
+            elif self.intent_type == "function_call" and functions is not None:
+                next_action = self.proactive_manager.proactive_prompt if self.proactive_manager.need_proactive else None
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
                     self.dialogue.get_llm_dialogue_with_memory(
-                        memory_str, self.config.get("voiceprint", {})
+                        memory_str, self.config.get("voiceprint", {}),
+                        self.user, next_action=next_action
                     ),
                     functions=functions,
                 )
             else:
+                next_action = self.proactive_manager.proactive_prompt if self.proactive_manager.need_proactive else None
                 llm_responses = self.llm.response(
                     self.session_id,
                     self.dialogue.get_llm_dialogue_with_memory(
@@ -719,6 +775,7 @@ class ConnectionHandler:
         content_arguments = ""
         self.client_abort = False
         emotion_flag = True
+        first_word_generated = False
         for response in llm_responses:
             if self.client_abort:
                 break
@@ -755,6 +812,11 @@ class ConnectionHandler:
 
             if content is not None and len(content) > 0:
                 if not tool_call_flag:
+                    if not first_word_generated:
+                        first_word_time = time.time()
+                        time_to_first_word = (first_word_time - self.start_time) * 1000
+                        self.logger.bind(tag=TAG).info(f"从收到消息到第一个词生成耗时: {time_to_first_word:.2f}ms")
+                        first_word_generated = True
                     response_message.append(content)
                     self.tts.tts_text_queue.put(
                         TTSMessageDTO(
@@ -762,6 +824,7 @@ class ConnectionHandler:
                             sentence_type=SentenceType.MIDDLE,
                             content_type=ContentType.TEXT,
                             content_detail=content,
+                            voice=current_voice,
                         )
                     )
         # 处理function call
@@ -803,21 +866,25 @@ class ConnectionHandler:
                     "arguments": function_arguments,
                 }
 
-                # 使用统一工具处理器处理所有工具调用
-                result = asyncio.run_coroutine_threadsafe(
-                    self.func_handler.handle_llm_function_call(
-                        self, function_call_data
-                    ),
-                    self.loop,
-                ).result()
-                self._handle_function_result(result, function_call_data, depth=depth)
+                if self.current_agent is None and self.agent_handler.is_agent_tool(function_name):
+                    self.current_agent = function_name
+                    self.chat(query, agent_call=True)
+                else:
+                    # 使用统一工具处理器处理所有工具调用
+                    result = asyncio.run_coroutine_threadsafe(
+                        self.func_handler.handle_llm_function_call(
+                            self, function_call_data
+                        ),
+                        self.loop,
+                    ).result()
+                    self._handle_function_result(result, function_call_data, depth=depth)
 
         # 存储对话内容
         if len(response_message) > 0:
             text_buff = "".join(response_message)
             self.tts_MessageText = text_buff
             self.dialogue.put(Message(role="assistant", content=text_buff))
-        if depth == 0:
+        if depth == 0 and not agent_call:
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=self.sentence_id,
@@ -863,6 +930,43 @@ class ConnectionHandler:
                     )
                 )
 
+                self.dialogue.put(
+                    Message(
+                        role="tool",
+                        tool_call_id=(
+                            str(uuid.uuid4()) if function_id is None else function_id
+                        ),
+                        content=text,
+                    )
+                )
+                self.chat(text, depth=depth + 1)
+        elif result.action == Action.REQ_USER_LLM:
+            user_fun_name = result.result
+            if user_fun_name is not None and len(user_fun_name) > 0:
+                function_id = function_call_data["id"]
+                function_name = function_call_data["name"]
+                function_arguments = function_call_data["arguments"]
+                self.dialogue.put(
+                    Message(
+                        role="assistant",
+                        tool_calls=[
+                            {
+                                "id": function_id,
+                                "function": {
+                                    "arguments": function_arguments,
+                                    "name": function_name,
+                                },
+                                "type": "function",
+                                "index": 0,
+                            }
+                        ],
+                    )
+                )
+                text = ''
+                if hasattr(self.user, user_fun_name) and callable(getattr(self.user, user_fun_name)):
+                    method = getattr(self.user, user_fun_name)
+                    text = method()
+                    self.logger.bind(tag=TAG).info("执行user方法：{}", user_fun_name)
                 self.dialogue.put(
                     Message(
                         role="tool",
@@ -1074,3 +1178,14 @@ class ConnectionHandler:
             self.logger.bind(tag=TAG).error(f"超时检查任务出错: {e}")
         finally:
             self.logger.bind(tag=TAG).info("超时检查任务已退出")
+
+    def remind_homework(self):
+        homework_info = self.user.homework_info
+        # 没作业
+        if not homework_info:
+            return
+        # 提醒过了或者不需要提醒
+        if not homework_info.remind:
+            return
+        self.executor.submit(self.chat, "我最近有未完成的作业吗")
+        homework_info.remind = False

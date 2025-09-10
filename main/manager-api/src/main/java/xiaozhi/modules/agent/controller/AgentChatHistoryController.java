@@ -21,13 +21,13 @@ public class AgentChatHistoryController {
     private final AgentChatHistoryBizService agentChatHistoryBizService;
 
     /**
-     * 小智服务聊天上报请求
+     * 小阅服务聊天上报请求
      * <p>
-     * 小智服务聊天上报请求，包含Base64编码的音频数据和相关信息。
+     * 小阅服务聊天上报请求，包含Base64编码的音频数据和相关信息。
      *
      * @param request 包含上传文件及相关信息的请求对象
      */
-    @Operation(summary = "小智服务聊天上报请求")
+    @Operation(summary = "小阅服务聊天上报请求")
     @PostMapping("/report")
     public Result<Boolean> uploadFile(@Valid @RequestBody AgentChatHistoryReportDTO request) {
         Boolean result = agentChatHistoryBizService.report(request);

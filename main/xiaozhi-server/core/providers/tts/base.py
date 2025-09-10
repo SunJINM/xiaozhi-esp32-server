@@ -83,14 +83,14 @@ class TTSProviderBase(ABC):
     def handle_audio_file(self, file_audio: bytes, text):
         self.before_stop_play_files.append((file_audio, text))
 
-    def to_tts_stream(self, text, opus_handler: Callable[[bytes], None] = None) -> None:
+    def to_tts_stream(self, text, opus_handler: Callable[[bytes], None] = None, voice: str = None) -> None:
         text = MarkdownCleaner.clean_markdown(text)
         max_repeat_time = 5
         if self.delete_audio_file:
             # 需要删除文件的直接转为音频数据
             while max_repeat_time > 0:
                 try:
-                    audio_bytes = asyncio.run(self.text_to_speak(text, None))
+                    audio_bytes = asyncio.run(self.text_to_speak(text, None, voice))
                     if audio_bytes:
                         self.tts_audio_queue.put((SentenceType.FIRST, None, text))
                         audio_bytes_to_data_stream(
@@ -121,7 +121,7 @@ class TTSProviderBase(ABC):
             try:
                 while not os.path.exists(tmp_file) and max_repeat_time > 0:
                     try:
-                        asyncio.run(self.text_to_speak(text, tmp_file))
+                        asyncio.run(self.text_to_speak(text, tmp_file, voice))
                     except Exception as e:
                         logger.bind(tag=TAG).warning(
                             f"语音生成失败{5 - max_repeat_time + 1}次: {text}，错误: {e}"
@@ -178,6 +178,7 @@ class TTSProviderBase(ABC):
                 conn.sentence_id = sentence_id
         # 对于单句的文本，进行分段处理
         segments = re.split(r"([。！？!?；;\n])", content_detail)
+        voice = self.conn._get_current_voice()
         for seg in segments:
             self.tts_text_queue.put(
                 TTSMessageDTO(
@@ -186,6 +187,7 @@ class TTSProviderBase(ABC):
                     content_type=content_type,
                     content_detail=seg,
                     content_file=content_file,
+                    voice=voice,
                 )
             )
 
@@ -225,7 +227,10 @@ class TTSProviderBase(ABC):
                     self.tts_text_buff.append(message.content_detail)
                     segment_text = self._get_segment_text()
                     if segment_text:
-                        self.to_tts_stream(segment_text, opus_handler=self.handle_opus)
+                        # 使用消息中传递的音色参数，如果没有则使用默认音色
+                        voice = message.voice if hasattr(message, 'voice') and message.voice else self.conn._get_current_voice()
+
+                        self.to_tts_stream(segment_text, opus_handler=self.handle_opus, voice=voice)
                 elif ContentType.FILE == message.content_type:
                     self._process_remaining_text_stream(opus_handler=self.handle_opus)
                     tts_file = message.content_file

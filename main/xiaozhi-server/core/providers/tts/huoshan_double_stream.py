@@ -288,7 +288,7 @@ class TTSProvider(TTSProviderBase):
                 )
                 continue
 
-    async def text_to_speak(self, text, _):
+    async def text_to_speak(self, text, _, voice=None):
         """发送文本到TTS服务"""
         try:
             # 建立新连接
@@ -299,8 +299,11 @@ class TTSProvider(TTSProviderBase):
             #  过滤Markdown
             filtered_text = MarkdownCleaner.clean_markdown(text)
 
+            selected_voice = voice if voice else self.voice
+            logger.bind(tag=TAG).debug(f"使用音色: {selected_voice}")
+
             # 发送文本
-            await self.send_text(self.voice, filtered_text, self.conn.sentence_id)
+            await self.send_text(selected_voice, filtered_text, self.conn.sentence_id)
             return
         except Exception as e:
             logger.bind(tag=TAG).error(f"发送TTS文本失败: {str(e)}")

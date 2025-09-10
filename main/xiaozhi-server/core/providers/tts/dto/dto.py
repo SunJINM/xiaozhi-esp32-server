@@ -35,6 +35,8 @@ class TTSMessageDTO:
         content_detail: Optional[str] = None,
         # 如果内容类型为文件，则需要传入文件路径
         content_file: Optional[str] = None,
+        # 音色参数，用于动态指定TTS音色
+        voice: Optional[str] = None,
     ):
         self.sentence_id = sentence_id
         self.sentence_type = sentence_type

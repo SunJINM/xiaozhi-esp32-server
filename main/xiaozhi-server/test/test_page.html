@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>小智服务器测试页面</title>
+    <title>小阅服务器测试页面</title>
     <link rel="stylesheet" href="test_page.css">
     <style>
         #fileProtocolWarning {
@@ -84,7 +84,7 @@
 
 <body>
     <div class="container">
-        <h1>小智服务器测试页面</h1>
+        <h1>小阅服务器测试页面</h1>
 
         <div id="scriptStatus" style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);">
             正在加载Opus库...
@@ -678,10 +678,10 @@
                 const serverUrl = serverUrlInput.value.trim();
                 let isXiaozhiNative = false;
 
-                // 检查是否是小智原生服务器 (根据URL特征判断)
+                // 检查是否是小阅原生服务器 (根据URL特征判断)
                 if (serverUrl.includes('xiaozhi') || serverUrl.includes('localhost') || serverUrl.includes('127.0.0.1')) {
                     isXiaozhiNative = true;
-                    log('检测到小智原生服务器，使用标准listen协议', 'info');
+                    log('检测到小阅原生服务器，使用标准listen协议', 'info');
                 }
 
                 // 使用直接PCM录音和libopus编码的方式
@@ -813,7 +813,7 @@
                                 const payload = message.payload || {};
                                 log(`服务器下发: ${JSON.stringify(message)}`, 'info');
                                 if (payload) {
-                                    // 模拟小智客户端行为
+                                    // 模拟小阅客户端行为
                                     if (payload.method === 'tools/list') {
                                         const replay_message = JSON.stringify({
                                             "session_id": "", "type": "mcp", "payload": {

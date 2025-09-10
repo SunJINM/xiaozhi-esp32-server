@@ -72,7 +72,7 @@ export default {
 
       // 在控制台输出提示信息
       console.info(
-        '%c[小智服务] CDN缓存检查工具已加载',
+        '%c[小阅服务] CDN缓存检查工具已加载',
         'color: #409EFF; font-weight: bold;'
       );
       console.info(
@@ -83,7 +83,7 @@ export default {
       this.checkServiceWorkerStatus();
     } else {
       console.info(
-        '%c[小智服务] CDN模式已禁用，使用本地打包资源',
+        '%c[小阅服务] CDN模式已禁用，使用本地打包资源',
         'color: #67C23A; font-weight: bold;'
       );
     }
@@ -108,7 +108,7 @@ export default {
           const registrations = await navigator.serviceWorker.getRegistrations();
           if (registrations.length > 0) {
             console.info(
-              '%c[小智服务] Service Worker已注册',
+              '%c[小阅服务] Service Worker已注册',
               'color: #67C23A; font-weight: bold;'
             );
 
@@ -117,14 +117,14 @@ export default {
               const hasCaches = await logCacheStatus();
               if (!hasCaches) {
                 console.info(
-                  '%c[小智服务] 还未检测到缓存，请刷新页面或等待缓存建立',
+                  '%c[小阅服务] 还未检测到缓存，请刷新页面或等待缓存建立',
                   'color: #E6A23C; font-weight: bold;'
                 );
 
                 // 开发环境下提供额外提示
                 if (process.env.NODE_ENV === 'development') {
                   console.info(
-                    '%c[小智服务] 在开发环境中，Service Worker可能无法正常初始化缓存',
+                    '%c[小阅服务] 在开发环境中，Service Worker可能无法正常初始化缓存',
                     'color: #E6A23C; font-weight: bold;'
                   );
                   console.info('请尝试以下方法检查Service Worker是否生效:');
@@ -136,13 +136,13 @@ export default {
             }, 2000);
           } else {
             console.info(
-              '%c[小智服务] Service Worker未注册，CDN资源可能无法缓存',
+              '%c[小阅服务] Service Worker未注册，CDN资源可能无法缓存',
               'color: #F56C6C; font-weight: bold;'
             );
 
             if (process.env.NODE_ENV === 'development') {
               console.info(
-                '%c[小智服务] 在开发环境中，这是正常现象',
+                '%c[小阅服务] 在开发环境中，这是正常现象',
                 'color: #E6A23C; font-weight: bold;'
               );
               console.info('Service Worker通常只在生产环境中生效');

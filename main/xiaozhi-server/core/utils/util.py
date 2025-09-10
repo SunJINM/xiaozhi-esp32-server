@@ -11,6 +11,7 @@ import requests
 import opuslib_next
 from pydub import AudioSegment
 import copy
+from modelscope.hub.snapshot_download import snapshot_download
 
 TAG = __name__
 emoji_map = {
@@ -431,3 +432,26 @@ def validate_mcp_endpoint(mcp_endpoint: str) -> bool:
         return False
 
     return True
+
+def models_download(config):
+    # download_dir 目录不包含自己模型的文件夹
+    prefix = ""
+    os_env = os.environ.get('PYTHON_PROFILES_ACTIVATE', "dev")
+    if not 'dev' in os_env:
+        prefix = "/usr/xxtsrc/projfile/xiaozhi-server/"
+    funasr_download_dir = config.get("ASR", {}).get("ASR_FunASR", {}).get("download_dir", "")
+    funasr_model_id = config.get("ASR", {}).get("ASR_FunASR", {}).get("model_id", "")
+    if funasr_download_dir is not None and len(funasr_download_dir) > 0:
+        funasr_download_dir = os.path.join(prefix, funasr_download_dir)
+        # 判断之前是否下载了
+        # modelscope 下载模型
+        local_model_path = snapshot_download(
+            model_id=funasr_model_id,
+            cache_dir=funasr_download_dir,
+            revision='master'
+        )
+        print("-" * 50)
+        print(f"模型下载完成！")
+        print(f"文件已保存到: {local_model_path}")
+        if os.path.exists(funasr_download_dir):
+            print(f"'{funasr_download_dir}' 的内容: {os.listdir(funasr_download_dir)}")

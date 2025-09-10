@@ -178,7 +178,7 @@ onShow(() => {
         <view class="banner-content">
           <view class="welcome-info">
             <text class="greeting">
-              你好，小智
+              你好，小阅
             </text>
             <text class="subtitle">
               让我们度过 <text class="highlight">

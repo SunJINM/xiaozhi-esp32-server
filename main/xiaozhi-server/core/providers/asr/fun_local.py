@@ -46,7 +46,11 @@ class ASRProvider(ASRProviderBase):
             logger.bind(tag=TAG).error(f"可用内存不足2G，当前仅有 {total_mem / (1024*1024):.2f} MB，可能无法启动FunASR")
         
         self.interface_type = InterfaceType.LOCAL
-        self.model_dir = config.get("model_dir")
+        prefix = ""
+        os_env = os.environ.get('PYTHON_PROFILES_ACTIVATE', "dev")
+        if not 'dev' in os_env:
+            prefix = "/usr/xxtsrc/projfile/xiaozhi-server/"
+        self.model_dir = os.path.join(prefix, config.get("download_dir"), config.get("model_id"))
         self.output_dir = config.get("output_dir")  # 修正配置键名
         self.delete_audio_file = delete_audio_file
 
