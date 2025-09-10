@@ -736,11 +736,11 @@ class ConnectionHandler:
         try:
             # 使用带记忆的对话
             memory_str = None
-            if self.memory is not None:
-                future = asyncio.run_coroutine_threadsafe(
-                    self.memory.query_memory(query), self.loop
-                )
-                memory_str = future.result()
+            # if self.memory is not None:
+            #     future = asyncio.run_coroutine_threadsafe(
+            #         self.memory.query_memory(query), self.loop
+            #     )
+            #     memory_str = future.result()
 
             if self.current_agent is not None:
                 llm_responses = self.agent_handler.execute_tool(self.current_agent, self.agent_dialogue, memory=memory_str)
@@ -760,7 +760,8 @@ class ConnectionHandler:
                 llm_responses = self.llm.response(
                     self.session_id,
                     self.dialogue.get_llm_dialogue_with_memory(
-                        memory_str, self.config.get("voiceprint", {})
+                        memory_str, self.config.get("voiceprint", {}),
+                        self.user, next_action=next_action
                     ),
                 )
         except Exception as e:

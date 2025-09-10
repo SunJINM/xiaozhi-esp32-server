@@ -26,6 +26,8 @@ class LLMProvider(LLMProviderBase):
             "temperature": (0.7, lambda x: round(float(x), 1)),
             "top_p": (1.0, lambda x: round(float(x), 1)),
             "frequency_penalty": (0, lambda x: round(float(x), 1)),
+            "reasoning": (False, bool),
+            "stream_reasoning": (False, bool),
         }
 
         for param, (default, converter) in param_defaults.items():
@@ -60,6 +62,7 @@ class LLMProvider(LLMProviderBase):
                 frequency_penalty=kwargs.get(
                     "frequency_penalty", self.frequency_penalty
                 ),
+                reasoning_effort='low'
             )
 
             is_active = True
@@ -91,7 +94,7 @@ class LLMProvider(LLMProviderBase):
     def response_with_functions(self, session_id, dialogue, functions=None):
         try:
             stream = self.client.chat.completions.create(
-                model=self.model_name, messages=dialogue, stream=True, tools=functions
+                model=self.model_name, messages=dialogue, stream=True, tools=functions, reasoning_effort='low'
             )
 
             for chunk in stream:
