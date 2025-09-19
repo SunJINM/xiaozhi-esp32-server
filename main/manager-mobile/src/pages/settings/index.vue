@@ -56,11 +56,11 @@ function getCacheInfo() {
 // 验证URL格式
 function validateUrl() {
   urlError.value = ''
-  
+
   if (!baseUrlInput.value) {
     return
   }
-  
+
   if (!/^https?:\/\/.+\/xiaozhi$/.test(baseUrlInput.value)) {
     urlError.value = '请输入有效的服务端地址（以 http 或 https 开头，并以 /xiaozhi 结尾）'
   }
@@ -70,7 +70,7 @@ function validateUrl() {
 async function testServerBaseUrl() {
   // 先清除错误信息
   urlError.value = ''
-  
+
   if (!baseUrlInput.value || !/^https?:\/\/.+\/xiaozhi$/.test(baseUrlInput.value)) {
     return false
   }
@@ -113,20 +113,20 @@ async function saveServerBaseUrl() {
   clearAllCacheAfterUrlChange()
 
   uni.showModal({
-      title: '重启应用',
-      content: '服务端地址已保存并清空缓存，是否立即重启生效？',
-      confirmText: '立即重启',
-      cancelText: '稍后',
-      success: (res) => {
-        if (res.confirm) {
-          restartApp()
-        }
-        else {
-          toast.success('已保存，可稍后手动重启应用')
-        }
-      },
-    })
-  }
+    title: '重启应用',
+    content: '服务端地址已保存并清空缓存，是否立即重启生效？',
+    confirmText: '立即重启',
+    cancelText: '稍后',
+    success: (res) => {
+      if (res.confirm) {
+        restartApp()
+      }
+      else {
+        toast.success('已保存，可稍后手动重启应用')
+      }
+    },
+  })
+}
 
 // 重置为 env 默认
 function resetServerBaseUrl() {
@@ -263,17 +263,10 @@ onMounted(async () => {
 
           <view class="mb-[24rpx]">
             <view class="w-full rounded-[16rpx] border border-[#eeeeee] bg-[#f5f7fb] overflow-hidden">
-              <wd-input
-                v-model="baseUrlInput"
-                type="text"
-                clearable
-                :maxlength="200"
+              <wd-input v-model="baseUrlInput" type="text" clearable :maxlength="200"
                 placeholder="输入服务端地址，如 https://example.com/xiaozhi"
                 custom-class="!border-none !bg-transparent h-[88rpx] px-[24rpx] items-center"
-                input-class="text-[28rpx] text-[#232338]"
-                @input="validateUrl"
-                @blur="validateUrl"
-              />
+                input-class="text-[28rpx] text-[#232338]" @input="validateUrl" @blur="validateUrl" />
             </view>
             <text v-if="urlError" class="mt-[8rpx] block text-[24rpx] text-[#ff4d4f]">
               {{ urlError }}
@@ -371,7 +364,7 @@ onMounted(async () => {
 
       <!-- 底部安全距离 -->
       <!-- 底部安全距离 -->
-    <view style="height: env(safe-area-inset-bottom);" />
+      <view style="height: env(safe-area-inset-bottom);" />
     </view>
   </view>
 </template>
