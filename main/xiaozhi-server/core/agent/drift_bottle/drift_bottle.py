@@ -7,7 +7,7 @@ from core.agent.drift_bottle.drift_bottle_functions import (
     get_user_status,
     throw_bottle,
     catch_bottle,
-    listen_replies,
+    get_pending_replies,
     reply_to_bottle,
     marked_listened,
     exit_agent
@@ -23,7 +23,7 @@ class DriftBottle(Agent):
         "get_user_status": get_user_status,
         "throw_bottle": throw_bottle,
         "catch_bottle": catch_bottle,
-        "listen_replies": listen_replies,
+        "get_pending_replies": get_pending_replies,
         "reply_to_bottle": reply_to_bottle,
         "exit_agent": exit_agent
     }
@@ -117,7 +117,7 @@ class DriftBottle(Agent):
             {
                 "type": "function",
                 "function": {
-                    "name": "listen_replies",
+                    "name": "get_pending_replies",
                     "description": "收听回复 - 当用户想要查看自己扔出的漂流瓶收到的回复时调用。",
                     "parameters": {
                         "type": "object",

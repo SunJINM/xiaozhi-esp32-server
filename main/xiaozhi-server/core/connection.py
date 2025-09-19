@@ -400,7 +400,7 @@ class ConnectionHandler:
             """更新系统提示词"""
             self._init_prompt_enhancement()
             """初始化是否需要主动询问用户信息"""
-            self.proactive_manager.init_proactive(self.llm, self.memory, self.loop)
+            # self.proactive_manager.init_proactive(self.llm, self.memory, self.loop)
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"实例化组件失败: {e}")
@@ -816,7 +816,7 @@ class ConnectionHandler:
                     if not first_word_generated:
                         first_word_time = time.time()
                         time_to_first_word = (first_word_time - self.start_time) * 1000
-                        self.logger.bind(tag=TAG).info(f"从收到消息到第一个词生成耗时: {time_to_first_word:.2f}ms")
+                        self.logger.bind(tag=TAG).info(f"first token time: {time_to_first_word:.2f}ms")
                         first_word_generated = True
                     response_message.append(content)
                     self.tts.tts_text_queue.put(
@@ -884,7 +884,10 @@ class ConnectionHandler:
         if len(response_message) > 0:
             text_buff = "".join(response_message)
             self.tts_MessageText = text_buff
-            self.dialogue.put(Message(role="assistant", content=text_buff))
+            if self.current_agent:
+                self.agent_dialogue.put(Message(role="assistant", content=text_buff))
+            else:
+                self.dialogue.put(Message(role="assistant", content=text_buff))
         if depth == 0 and not agent_call:
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(

@@ -88,7 +88,7 @@ def catch_bottle(user: User, num: int = 1, conn: ConnectionHandler = None, *args
     except Exception as e:
         return ActionResponse(Action.RESPONSE, None, f"捞瓶子时出现了问题\n\n要不要再试一次？")
 
-def listen_replies(user: User, num: int = 1, *args, **kwargs):
+def get_pending_replies(user: User, num: int = 1, *args, **kwargs):
     """收听回复工具函数"""
     try:
         api = DriftBottleAPI(user)

@@ -51,7 +51,7 @@ class ServerPluginExecutor(ToolExecutor):
         tools = {}
 
         # 获取必要的函数
-        necessary_functions = ["handle_exit_intent", "get_lunar", "play_story", "quiz"]
+        necessary_functions = ["handle_exit_intent", "get_lunar", "play_story", "quiz", "play_music"]
 
         # 获取配置中的函数
         config_functions = self.config["Intent"][

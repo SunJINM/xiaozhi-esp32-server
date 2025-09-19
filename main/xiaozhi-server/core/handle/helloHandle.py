@@ -28,5 +28,5 @@ async def handleHelloMessage(conn, msg_json):
             asyncio.create_task(send_mcp_initialize_message(conn))
             # 发送mcp消息，获取tools列表
             asyncio.create_task(send_mcp_tools_list_request(conn))
-
+    conn.logger.bind(tag=TAG).info(f"返回客户端消息: {conn.welcome_msg}")
     await conn.websocket.send(json.dumps(conn.welcome_msg))
